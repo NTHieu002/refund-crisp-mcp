@@ -1,0 +1,32 @@
+# Fly.io configuration for the PageFly Refund MCP Server
+# App name is globally unique across Fly — change it here if "refund-crisp-mcp"
+# is already taken when you run `fly apps create`.
+
+app            = "refund-crisp-mcp"
+primary_region = "nrt"   # Tokyo — same AWS region as the Turso database
+
+[build]
+
+[env]
+  PORT      = "3000"
+  NODE_ENV  = "production"
+
+[http_service]
+  internal_port        = 3000
+  force_https          = true
+  auto_stop_machines   = "stop"
+  auto_start_machines  = true
+  min_machines_running = 0
+  processes            = ["app"]
+
+  [[http_service.checks]]
+    interval     = "30s"
+    timeout      = "5s"
+    grace_period = "10s"
+    method       = "GET"
+    path         = "/health"
+
+[[vm]]
+  memory   = "512mb"
+  cpu_kind = "shared"
+  cpus     = 1

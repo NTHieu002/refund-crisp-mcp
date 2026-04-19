@@ -7,3 +7,5 @@ dist/
 .cache/
 .github/
 documents/
+fly.toml
+.dockerignore

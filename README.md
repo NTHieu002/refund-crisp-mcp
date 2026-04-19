@@ -33,6 +33,26 @@ PORT=3000
 
 Migrations run automatically at server start — safe to re-run.
 
+## Deploying to Fly.io
+
+The repo ships with `fly.toml` and a `Dockerfile` ready to deploy. Prerequisites: a Fly.io account and the `flyctl` CLI installed (`iwr https://fly.io/install.ps1 -useb | iex` on Windows).
+
+```sh
+fly auth login
+
+# First-time only (pick a globally-unique app name; update fly.toml if you choose a different one)
+fly apps create refund-crisp-mcp
+
+# Inject Turso credentials as Fly secrets (do NOT commit them)
+fly secrets set \
+  TURSO_DATABASE_URL="libsql://<your-db>.turso.io" \
+  TURSO_AUTH_TOKEN="<token>"
+
+fly deploy
+```
+
+The MCP endpoint will then be available at `https://<your-app>.fly.dev/mcp`.
+
 ## I. Installing & Running
 
 _To get started with this MCP server, you can either run it locally or use the hosted version._
