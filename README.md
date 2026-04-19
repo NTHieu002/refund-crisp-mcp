@@ -1,49 +1,176 @@
 # PageFly Refund MCP Server
 
-**MCP (Model Context Protocol) server for Crisp's Hugo AI Agent to handle PageFly refund requests end-to-end.**
+MCP (Model Context Protocol) server for Crisp's **Hugo AI Agent** to handle PageFly refund requests end-to-end — from first customer message to Manager escalation and post-refund checklist.
 
-It exposes nine tools grouped into three layers:
+Built with the [@modelcontextprotocol TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk), Express, Zod, and Turso (libSQL) for persistent case state.
 
-**Lookup (mock fixtures)**
-- `check_subscription` → get the current plan for a store or email
-- `get_billing_history` → list every bill / Upcoming charge for a store
+---
 
-**Pure logic**
-- `classify_refund_case` → map context to one of 7 playbook cases (TH1–TH7)
-- `calculate_refund` → 30-day prorated or multi-cycle refund math with deduction
-- `collect_refund_info` → decide the next question to ask and surface blockers
-- `generate_refund_message` → draft the customer reply from PageFly templates
+## What it does
 
-**State (Turso / libSQL)**
-- `get_case_state` → resume a case by store URL
-- `save_case_state` → persist progress at every meaningful step
-- `list_pending_cases` → review cases waiting on Manager, customer, or bill paid
+Hugo reads the customer message, picks the right tools, and drives the refund conversation through the PageFly playbook: collect info → classify case → compute prorated refund → draft reply → persist state for later resumption.
 
-_Built with the [@modelcontextprotocol Typescript SDK](https://github.com/modelcontextprotocol/typescript-sdk)._
+If the customer disappears and comes back a day later, Hugo calls `get_case_state` first and continues exactly where it left off (win-back already offered, manager pending, bill still Upcoming, etc.).
+
+---
+
+## Tools (9 total)
+
+### Lookup — mock data today, swap for real API in production
+- **`check_subscription`** — subscription status, plan, price, cycle window (input: `store_url` or `email`)
+- **`get_billing_history`** — every paid/upcoming/failed bill with Shopify fee-adjusted earnings
+
+### Pure logic — deterministic rules & math
+- **`classify_refund_case`** — maps context to one of the 7 playbook cases (TH1–TH7), picks the deduction (0/20/40 %) and flags escalation to Manager (Boo) or Shift Manager
+- **`calculate_refund`** — 30-day prorated refund or multi-cycle full-cycle refund, with deduction applied
+- **`collect_refund_info`** — decides the next question to ask (store URL, invoice, reason, bank confirmation) and surfaces blockers (Upcoming bill, plan still Paid)
+- **`generate_refund_message`** — drafts the customer-facing reply by combining the PageFly templates (intro, win-back, breakdown, Upcoming-bill options, case-specific blocks)
+
+### State — backed by Turso libSQL
+- **`get_case_state`** — load a case by `store_url`
+- **`save_case_state`** — partial upsert (all 50+ fields optional, merges with existing row)
+- **`list_pending_cases`** — review cases by stage (e.g. `awaiting_manager`, `awaiting_customer_confirm`)
+
+---
+
+## Project structure
+
+```
+src/
+  server.ts                       # Express entrypoint, runs migrations on boot
+  mcp/
+    index.ts                      # McpServer setup + instructions for Hugo
+    tools/
+      check_subscription/         # Each tool = main.ts + handler.ts + shapes.ts
+      get_billing_history/
+      classify_refund_case/
+      calculate_refund/
+      collect_refund_info/
+      generate_refund_message/
+      get_case_state/
+      save_case_state/
+      list_pending_cases/
+      _shared/case_shape.ts       # Shared Zod shape for DB-backed case rows
+      index.ts                    # Registers all 9 tools
+  db/
+    client.ts                     # libSQL client singleton
+    schema.ts                     # Embedded CREATE TABLE + indexes
+    migrate.ts                    # Idempotent migration runner
+    cases.ts                      # upsertCase / getCase / listCasesByStage
+  utils/logger.ts                 # MCP request/response logger
+fixtures/
+  stores.ts                       # Mock subscriptions — replace with real API in prod
+  billing_cycles.ts               # Mock billing history — replace with real API in prod
+Dockerfile                        # Generated via @flydotio/dockerfile
+fly.toml                          # Region nrt, scale-to-zero, /health check
+```
+
+---
 
 ## Environment
 
 Copy `.env.example` to `.env` and fill in your Turso credentials:
 
-```
+```env
 TURSO_DATABASE_URL=libsql://<your-db>.turso.io
 TURSO_AUTH_TOKEN=<token>
 PORT=3000
 ```
 
-Migrations run automatically at server start — safe to re-run.
+**No Turso account yet?** Sign up at [turso.tech](https://turso.tech), `turso db create refund-case`, `turso db tokens create refund-case --expiration none`.
+
+Migrations run automatically on server start — safe to re-run anytime.
+
+---
+
+## Local development
+
+Prereqs: Node.js 24.x.
+
+```sh
+npm ci
+npm run dev
+```
+
+Server listens on `http://localhost:3000/mcp`. Test endpoints:
+
+```sh
+curl http://localhost:3000/           # welcome message
+curl http://localhost:3000/health     # OK
+```
+
+### Inspecting tools
+
+```sh
+npm run inspect
+```
+
+Opens the MCP Inspector in your browser. Set **Transport Type → Streamable HTTP**, URL `http://localhost:3000/mcp`, click **Connect** — all 9 tools appear in the left panel.
+
+### Exposing locally to Crisp
+
+Hugo lives in Crisp's cloud and can't reach `localhost`. Open a second terminal:
+
+```sh
+npm run tunnel
+```
+
+Cloudflared prints a temporary `https://<random>.trycloudflare.com` URL — this changes every restart.
+
+---
+
+## Connecting to Crisp
+
+1. [app.crisp.chat](https://app.crisp.chat/) → **AI Agent → Automate → Integrations & MCP → External MCP servers**
+2. **Add MCP server** → paste `https://<your-url>/mcp`
+3. Name it, click **Refresh tools from server** (should list all 9), enable the toggle, **Save changes**
+4. Test in **AI Agent → Automate → Playground**
+
+### Example test conversation
+
+> Hi, I'm Hieu from `hieu-first-store.myshopify.com`. I'd like to cancel and get a refund please.
+
+Expected chain:
+1. `get_case_state` — no case yet
+2. `check_subscription` → 5-slot $24, active, 10 days into cycle
+3. `get_billing_history` → 3 paid cycles
+4. `collect_refund_info` — asks for reason + invoice + bank
+5. After customer replies → `classify_refund_case` → **TH1**, deduction 20 %
+6. `calculate_refund(24, days_used=10, days_unused=20, 20%)` → **$12.80**
+7. `generate_refund_message` → drafts the breakdown
+8. `save_case_state(stage: "awaiting_customer_confirm", refund_amount: 12.80, crisp_conversation_id: "session_...")`
+
+Verify the row was saved:
+
+```sh
+node --env-file=.env -e "
+import('./dist/src/db/client.js').then(async ({getDbClient}) => {
+  const r = await getDbClient().execute('SELECT store_url, stage, case_type, refund_amount FROM cases');
+  console.log(JSON.stringify(r.rows, null, 2));
+  process.exit(0);
+});
+"
+```
+
+---
 
 ## Deploying to Fly.io
 
-The repo ships with `fly.toml` and a `Dockerfile` ready to deploy. Prerequisites: a Fly.io account and the `flyctl` CLI installed (`iwr https://fly.io/install.ps1 -useb | iex` on Windows).
+The repo ships with `fly.toml` (region `nrt` — same as the Turso DB, scale-to-zero, `/health` check) and a Docker image ready to go.
+
+Install flyctl if needed:
+
+```powershell
+iwr https://fly.io/install.ps1 -useb | iex    # Windows
+```
 
 ```sh
 fly auth login
 
-# First-time only (pick a globally-unique app name; update fly.toml if you choose a different one)
+# First time only (app name is globally unique — update fly.toml if you change it)
 fly apps create refund-crisp-mcp
 
-# Inject Turso credentials as Fly secrets (do NOT commit them)
+# Inject Turso credentials as Fly secrets (never commit them)
 fly secrets set \
   TURSO_DATABASE_URL="libsql://<your-db>.turso.io" \
   TURSO_AUTH_TOKEN="<token>"
@@ -51,171 +178,44 @@ fly secrets set \
 fly deploy
 ```
 
-The MCP endpoint will then be available at `https://<your-app>.fly.dev/mcp`.
+Your MCP endpoint becomes `https://refund-crisp-mcp.fly.dev/mcp`. Update the URL in Crisp.
 
-## I. Installing & Running
-
-_To get started with this MCP server, you can either run it locally or use the hosted version._
-
-### Using the hosted version
-
-This MCP server comes already hosted at and ready to be connected to your Crisp workspace if you wish to test it out quickly.
-You can access it at: https://crisp-mcp-demo.fly.dev/mcp
-
-### Running locally
-
-#### Pre-requisites:
-
-- Node.js `24.x` installed
-- a keyboard (optional, but recommended)
-
-#### Step 1 — Cloning the repo
-
-Open a terminal in your desired folder and run:
+Runtime checks:
 
 ```sh
-git clone https://github.com/NTHieu002/refund-crisp-mcp.git
-cd refund-crisp-mcp
+fly logs
+curl https://refund-crisp-mcp.fly.dev/health   # OK
 ```
 
-#### Step 2 — Running the server
+---
 
-_You can either build and start the server, or run it directly in dev mode._
+## Moving from mock to production data
 
-To build and run the server, use:
+`check_subscription` and `get_billing_history` currently read from `fixtures/*.ts`. To wire real data, replace the body of their `handler.ts` files with `fetch(...)` against either:
 
-```sh
-npm ci
-npm run build
-npm run start
-```
+- **PageFly internal API** — richest data (plan name, slots, earnings, cancel reason). Ask the backend team.
+- **Shopify Partner GraphQL API** — subscription + transactions. Limited to what's exposed to partners.
 
-Or to run it in dev mode with tsx (watch mode), use:
+Zod input/output shapes stay the same, so **no other tool needs changes** — the six logic and state tools keep working unchanged. Don't forget to add an API key to `.env` and Fly secrets.
 
-```sh
-npm ci
-npm run dev
-```
+---
 
-#### Step 3 — Exposing the server (if running locally)
+## Scripts
 
-_If you wish to run the server locally, you will need to expose it through a tunnel
-so that Crisp can reach it.
-This package is pre-configured to use Cloudflared, though you can use any tunneling solution you prefer._
+| Script | What it does |
+|---|---|
+| `npm run dev` | tsx watch mode, auto-reload on code change, loads `.env` |
+| `npm run build` | `tsc --build` + `tsc-alias` (resolves `@/…` paths in emitted JS) |
+| `npm run start` | Run compiled `dist/` server, loads `.env` if present |
+| `npm run tunnel` | Expose localhost via Cloudflare Tunnel |
+| `npm run inspect` | Open the MCP Inspector UI |
+| `npm run lint` | ESLint on `src/` |
 
-If Cloudflared is not yet installed on your machine, [follow this link](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/downloads/) to find the installation instructions for your OS:
+---
 
-Once installed, open a new terminal and run:
+## Operational notes
 
-```sh
-npm run tunnel
-```
-
-You can visit your tunnel's url to confirm it's working. You should see a greeting message.
-
-#### Available scripts
-
-- `npm run dev` → dev server (watch)
-- `npm run build` → compile TypeScript
-- `npm run start` → run compiled server
-- `npm run tunnel` → expose localhost via Cloudflare Tunnel
-- `npm run inspect` → runs the @modelcontextprotocol Inspector
-
-## II. Connecting to Crisp
-
-_This section is a quickstart guide to connect this MCP server to your Crisp workspace.
-We recommend also checking out [our official documentation](https://docs.crisp.chat/) for more detailed instructions._
-
-#### Pre-requisites:
-
-- a Crisp account
-- a Crisp workspace on Essentials or Plus plan
-
-#### Step 1 — Navigate to [app.crisp.chat](https://app.crisp.chat/)
-
-#### Step 2 — In the **AI Agent** menu, head over to **AI Agent → Automate → Integrations & MCP** → External MCP servers** and click on the **Add MCP server\*\* zone.
-
-![Add MCP server](assets/add-mcp-server.png)
-
-#### Step 3 — Enter your MCP server's URL (either your hosted/tunneled URL our [hosted version](https://crisp-mcp-demo.fly.dev/mcp)) and hit **Add MCP Server**.
-
-![Add MCP Now](assets/add-mcp-now.png)
-
-#### Step 4 — Configure the MCP server:
-
-1. Name it
-2. Hit **Refresh tools from server** if your tools were not fetched automatically
-3. Enable the MCP server
-4. Hit the **Save changes** button
-
-![MCP Configuration](assets/mcp-configuration.png)
-
-#### Step 5 — Your MCP server should now be registered and ready to use!
-
-![Activated MCP](assets/activated-mcp.png)
-
-## III. Testing the MCP server
-
-_Still in the **Automations** menu, you can go to **Playground** to test your MCP server and different AI models. Ask it a question!_
-
-### Playground examples
-
-#### One-shot questions:
-
-> Could you check if the refund of my order `OID_002` has been processed?
-
-> Hi, are the notifications enabled on my account `baptiste@acme.com`?
-
-#### The AI can chain multiple tool calls (eg. find your accunt, list recent orders and get product details):
-
-> Are the items of my order `OID_001` still under warranty?
-
-> When will my latest order be delivered? I'm `chris@acme.com`
-
-#### Also try partial questions, and let the AI request additional information from you:
-
-> What was the amount of my last order?
-
-> I can't find my tracking number, can you help me?
-
-### Available accounts & orders
-
-- chris@acme.com
-  - `OID_003`
-  - `OID_006`
-- baptiste@acme.com
-  - `OID_001`
-  - `OID_004`
-- dinis@acme.com
-  - `OID_002`
-  - `OID_005`
-  - `OID_007`
-
-## MCP good practices
-
-### MCP Design
-
-- **Server description:** Describe the general purpose of the MCP server
-- **Tool naming:** use clear and explicit names (e.g. `get_order`, not `orderLookup`)
-- **Tool descriptions:** Concisely describe what the tool does, when to call it,
-  and optionally provide use-case examples
-- **Schemas:** Provide precise schemas for tool inputs to ensure correct usage
-
-### User Verification
-
-In your MCP server configuration, you can also optionally require users to authenticate themselves
-before the AI can call a MCP tool. This reinforces security over sensitive operations.
-
-If the user is not alredy authenticated, Crisp will send them an OTP code via email or SMS
-before allowing the AI to call your MCP tool.
-
-To do that, simply navigate to your MCP server and hit **Manage**.
-On each tool, you can toggle the **Require user identification verification** option.
-
-### Server Authentication
-
-In production, you may want to restrict the access to your MCP server and prevent unauthorized usage.
-Two authentication methods are available:
-
-- **Bearer Token:** a static token sent in the `Authorization` header of each request
-- **Basic Auth:** a username and password sent in the `Authorization` header of each request
+- **Cost**: Turso free tier covers 9 GB storage + 25 M writes/month — this server uses a fraction of it. Fly scale-to-zero keeps idle cost near $0.
+- **Cold start**: first MCP request after idle takes ~1–2 s (Fly machine wake + libSQL TLS handshake). All subsequent calls < 100 ms.
+- **State durability**: cases live in Turso, not on the Fly machine. Redeploying or scaling doesn't lose data.
+- **Safety**: refunds of 3+ cycles, unauthorized auto-upgrades (TH5) and any case with a team-member commitment are auto-flagged for Manager (Boo) approval — Hugo won't send an amount without it.
