@@ -4,9 +4,12 @@
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
-import { registerGetUserTool } from "@/mcp/tools/get_user/main.js";
-import { registerGetProductTool } from "@/mcp/tools/get_product/main.js";
-import { registerGetOrderTool } from "@/mcp/tools/get_order/main.js";
+import { registerCheckSubscriptionTool }    from "@/mcp/tools/check_subscription/main.js";
+import { registerGetBillingHistoryTool }    from "@/mcp/tools/get_billing_history/main.js";
+import { registerCalculateRefundTool }      from "@/mcp/tools/calculate_refund/main.js";
+import { registerClassifyRefundCaseTool }   from "@/mcp/tools/classify_refund_case/main.js";
+import { registerCollectRefundInfoTool }    from "@/mcp/tools/collect_refund_info/main.js";
+import { registerGenerateRefundMessageTool } from "@/mcp/tools/generate_refund_message/main.js";
 
 /**************************************************************************
  * MAIN
@@ -14,9 +17,12 @@ import { registerGetOrderTool } from "@/mcp/tools/get_order/main.js";
 
 // Helper function to register our tools
 function registerTools(server: McpServer): void {
-  registerGetUserTool(server);
-  registerGetProductTool(server);
-  registerGetOrderTool(server);
+  registerCheckSubscriptionTool(server);
+  registerGetBillingHistoryTool(server);
+  registerCalculateRefundTool(server);
+  registerClassifyRefundCaseTool(server);
+  registerCollectRefundInfoTool(server);
+  registerGenerateRefundMessageTool(server);
 }
 
 /**************************************************************************

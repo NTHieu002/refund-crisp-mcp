@@ -1,7 +1,7 @@
 {
   "name": "refund-crisp-mcp",
   "version": "1.0.0",
-  "description": "Example of MCP integration with Hugo AI",
+  "description": "PageFly refund MCP server for Crisp's Hugo AI Agent",
   "license": "ISC",
   "author": "Crisp IM",
   "type": "module",

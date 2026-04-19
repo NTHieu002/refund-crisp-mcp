@@ -9,3 +9,4 @@ fly.toml
 Dockerfile
 .dockerignore
 .github/
+documents/
