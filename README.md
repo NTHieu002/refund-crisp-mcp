@@ -1,16 +1,37 @@
-# Crisp MCP Demo Server
+# PageFly Refund MCP Server
 
-**Demo MCP (Model Context Protocol) server to showcase how to build and use MCP with Crisp.**
+**MCP (Model Context Protocol) server for Crisp's Hugo AI Agent to handle PageFly refund requests end-to-end.**
 
-This repository serves as a reference implementation for developers looking to experiment with MCP. It is ready to be deployed, tested, or built upon.
+It exposes nine tools grouped into three layers:
 
-It exposes a MCP endpoint with three tools backed by mock-up data:
+**Lookup (mock fixtures)**
+- `check_subscription` → get the current plan for a store or email
+- `get_billing_history` → list every bill / Upcoming charge for a store
 
-- `get_user` → get a user by `email`
-- `get_order` → get an order by `id`
-- `get_product` → get a product by `id`
+**Pure logic**
+- `classify_refund_case` → map context to one of 7 playbook cases (TH1–TH7)
+- `calculate_refund` → 30-day prorated or multi-cycle refund math with deduction
+- `collect_refund_info` → decide the next question to ask and surface blockers
+- `generate_refund_message` → draft the customer reply from PageFly templates
 
-_This demo is built using the [@modelcontextprotocol Typescript SDK](https://github.com/modelcontextprotocol/typescript-sdk). Visit their repo for more details and documentation on MCP._
+**State (Turso / libSQL)**
+- `get_case_state` → resume a case by store URL
+- `save_case_state` → persist progress at every meaningful step
+- `list_pending_cases` → review cases waiting on Manager, customer, or bill paid
+
+_Built with the [@modelcontextprotocol Typescript SDK](https://github.com/modelcontextprotocol/typescript-sdk)._
+
+## Environment
+
+Copy `.env.example` to `.env` and fill in your Turso credentials:
+
+```
+TURSO_DATABASE_URL=libsql://<your-db>.turso.io
+TURSO_AUTH_TOKEN=<token>
+PORT=3000
+```
+
+Migrations run automatically at server start — safe to re-run.
 
 ## I. Installing & Running
 
@@ -33,7 +54,7 @@ You can access it at: https://crisp-mcp-demo.fly.dev/mcp
 Open a terminal in your desired folder and run:
 
 ```sh
-git clone https://github.com/crisp-im/crisp-mcp-demo.git
+git clone https://github.com/NTHieu002/refund-crisp-mcp.git
 cd refund-crisp-mcp
 ```
 

@@ -38,8 +38,15 @@ function createMcpServer(): McpServer {
           (generate_refund_message)
 
         Typical flow:
-          collect_refund_info → check_subscription → get_billing_history →
-          classify_refund_case → calculate_refund → generate_refund_message
+          get_case_state → collect_refund_info → check_subscription →
+          get_billing_history → classify_refund_case → calculate_refund →
+          generate_refund_message → save_case_state
+
+        State tools (get_case_state, save_case_state, list_pending_cases) persist
+        case data in Turso so that if a customer returns a day later, the AI
+        resumes exactly where it left off (winback already offered, manager
+        pending, bill still Upcoming, etc.). Call get_case_state at the start
+        of a conversation and save_case_state after every meaningful step.
 
         All refunds follow a 30-day cycle and PageFly's deduction policy
         (0% full refund when a team member has committed, 20% default, 40% for

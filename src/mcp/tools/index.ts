@@ -10,6 +10,9 @@ import { registerCalculateRefundTool }      from "@/mcp/tools/calculate_refund/m
 import { registerClassifyRefundCaseTool }   from "@/mcp/tools/classify_refund_case/main.js";
 import { registerCollectRefundInfoTool }    from "@/mcp/tools/collect_refund_info/main.js";
 import { registerGenerateRefundMessageTool } from "@/mcp/tools/generate_refund_message/main.js";
+import { registerGetCaseStateTool }         from "@/mcp/tools/get_case_state/main.js";
+import { registerSaveCaseStateTool }        from "@/mcp/tools/save_case_state/main.js";
+import { registerListPendingCasesTool }     from "@/mcp/tools/list_pending_cases/main.js";
 
 /**************************************************************************
  * MAIN
@@ -17,12 +20,20 @@ import { registerGenerateRefundMessageTool } from "@/mcp/tools/generate_refund_m
 
 // Helper function to register our tools
 function registerTools(server: McpServer): void {
+  // Lookup tools — backed by in-memory fixtures
   registerCheckSubscriptionTool(server);
   registerGetBillingHistoryTool(server);
-  registerCalculateRefundTool(server);
+
+  // Pure-logic tools — deterministic rules and math
   registerClassifyRefundCaseTool(server);
+  registerCalculateRefundTool(server);
   registerCollectRefundInfoTool(server);
   registerGenerateRefundMessageTool(server);
+
+  // State tools — backed by Turso (libSQL) for cross-conversation continuity
+  registerGetCaseStateTool(server);
+  registerSaveCaseStateTool(server);
+  registerListPendingCasesTool(server);
 }
 
 /**************************************************************************

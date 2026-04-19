@@ -10,8 +10,8 @@
     "lint": "eslint 'src/**/*.{ts,js}'",
     "inspect": "npx @modelcontextprotocol/inspector",
     "build": "tsc --build tsconfig.json && tsc-alias -p tsconfig.json",
-    "start": "node dist/src/server.js",
-    "dev": "tsx watch src/server.ts",
+    "start": "node --env-file-if-exists=.env dist/src/server.js",
+    "dev": "tsx watch --env-file-if-exists=.env src/server.ts",
     "tunnel": "cloudflared tunnel --url http://localhost:${PORT:-3000}"
   },
   "devDependencies": {
@@ -25,6 +25,7 @@
     "typescript-eslint": "^8.46.4"
   },
   "dependencies": {
+    "@libsql/client": "^0.17.2",
     "@modelcontextprotocol/sdk": "^1.25.1",
     "express": "^5.2.1",
     "zod": "^4.2.1"

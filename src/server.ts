@@ -6,7 +6,8 @@ import express from "express";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 
 import { createMcpServer } from "@/mcp/index.js";
-import { mcpLogger } from "@/utils/logger.js";
+import { runMigrations }   from "@/db/migrate.js";
+import { mcpLogger }       from "@/utils/logger.js";
 
 /**************************************************************************
  * SERVER
@@ -20,7 +21,7 @@ const server = createMcpServer();
 // Registering a welcome message at the root endpoint
 app.get("/", (_req, res) => {
   res.send(
-    "Welcome to the Crisp MCP Demo Server! Use the /mcp endpoint to interact with this MCP server.",
+    "Welcome to the PageFly Refund MCP Server! Use the /mcp endpoint to interact with this MCP server.",
   );
 });
 
@@ -34,8 +35,8 @@ app.post("/mcp", (req, res) => {
   // Optionally set up an authentication middleware here (e.g. Bearer token or Basic Auth)
 
   const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: undefined,
-    enableJsonResponse: true,
+    sessionIdGenerator  : undefined,
+    enableJsonResponse  : true,
   });
 
   res.on("close", () => {
@@ -60,9 +61,16 @@ app.post("/mcp", (req, res) => {
     });
 });
 
-// Starting the server
+// Run DB migrations, then start listening
 const port = Number.parseInt(process.env.PORT ?? "3000", 10);
 
-app.listen(port, () => {
-  console.log(`Demo MCP Server running on http://localhost:${port}/mcp`);
-});
+runMigrations()
+  .then(() => {
+    app.listen(port, () => {
+      console.log(`Refund MCP Server running on http://localhost:${port}/mcp`);
+    });
+  })
+  .catch((error: unknown) => {
+    console.error("Failed to run DB migrations:", error);
+    process.exit(1);
+  });
