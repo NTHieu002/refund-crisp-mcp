@@ -14,7 +14,7 @@ import { registerTools } from "@/mcp/tools/index.js";
 function createMcpServer(): McpServer {
   const server = new McpServer(
     {
-      name    : "crisp-mcp-demo",
+      name    : "refund-crisp-mcp",
       version : "1.0.0",
     },
     {

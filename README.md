@@ -34,7 +34,7 @@ Open a terminal in your desired folder and run:
 
 ```sh
 git clone https://github.com/crisp-im/crisp-mcp-demo.git
-cd crisp-mcp-demo
+cd refund-crisp-mcp
 ```
 
 #### Step 2 — Running the server
