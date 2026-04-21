@@ -1,79 +1,153 @@
 # Deploy a second MCP on the same VPS
 
-Runbook for adding an additional MCP server (e.g. `sales-mcp`, `onboard-mcp`) alongside the existing `refund-mcp` on VPS `52.55.66.40` (`pf-support`).
+Runbook for adding a new MCP server (e.g. `sales-mcp`, `onboard-mcp`) alongside `refund-mcp` on VPS `52.55.66.40` (`pf-support`).
+
+> **Current state (as of 2026-04-21):** the one-time infrastructure (Caddy + refund-mcp on port 3000) is already deployed. Jump straight to **Part 2** unless you're replacing the VPS. Part 1 is kept at the end of this doc for reference and disaster recovery.
 
 ---
 
-## Architecture after the change
+## Architecture
 
 ```
-IT edge (HTTPS termination)
+IT edge (HTTPS termination, public internet)
     ├── refund-mcp.pagefly.io:443  ─┐
-    ├── sales-mcp.pagefly.io:443   ─┼──►  VPS port 80 (Caddy reverse proxy)
-    └── onboard-mcp.pagefly.io:443 ─┘               │
-                                                    ├── Host: refund-mcp.pagefly.io  → localhost:3000
-                                                    ├── Host: sales-mcp.pagefly.io   → localhost:3001
-                                                    └── Host: onboard-mcp.pagefly.io → localhost:3002
+    ├── sales-mcp.pagefly.io:443   ─┼──►  VPS :80 (Caddy)
+    └── onboard-mcp.pagefly.io:443 ─┘           │
+                                                ├── Host: refund-mcp.pagefly.io  → localhost:3000
+                                                ├── Host: sales-mcp.pagefly.io   → localhost:3001
+                                                └── Host: onboard-mcp.pagefly.io → localhost:3002
 ```
 
-Caddy routes incoming traffic by `Host` header to the correct Node process. Each MCP owns its own folder, `.env`, Turso DB, and PM2 process.
+Caddy routes by `Host` header to the correct Node process. Each MCP has its own folder, `.env`, Turso DB and PM2 process — zero cross-talk.
+
+### Port allocation on `pf-support`
+
+| Port | Owner |
+|------|-------|
+| 80 | Caddy (reverse proxy, receives from IT edge) |
+| 3000 | `refund-mcp` (active) |
+| 3001 | next MCP — claim when deploying |
+| 3002 | … |
+| 3003 | … |
+
+Assign the next free 30xx port to each new MCP. Keep this table in the doc up to date.
 
 ---
 
-## Prerequisites
+## Part 2 — Per-MCP deploy (do this for every new MCP)
 
-Before starting, get these from IT and Turso:
+Replace these placeholders throughout the commands below:
 
-- [ ] **Subdomain** from IT — e.g. `sales-mcp.pagefly.io`. IT must add forwarding rule: `sales-mcp.pagefly.io:443` (HTTPS) → VPS `52.55.66.40:80` (same as `refund-mcp`).
-- [ ] **Turso database** — sign in to [turso.tech](https://turso.tech), create a new DB (e.g. `sales-leads`), generate an auth token with no expiration. Save URL + token.
-- [ ] **Git repo** of the second MCP — must have the same `scripts/setup.sh` contract (or adapt). Assume URL is `https://github.com/<you>/<second-mcp>.git`.
+| Placeholder | Example | Meaning |
+|-------------|---------|---------|
+| `<NAME>` | `sales` | short name (folder + PM2 process id) |
+| `<PORT>` | `3001` | unused local port |
+| `<SUBDOMAIN>` | `sales-mcp.pagefly.io` | subdomain IT forwards to VPS:80 |
+| `<REPO_URL>` | `https://github.com/<org>/<repo>.git` | Git URL of the MCP code |
+| `<TURSO_URL>` | `libsql://sales-leads-xxx.turso.io` | Turso DB URL |
+| `<TURSO_TOKEN>` | `eyJhbGc…` | Turso auth token |
 
----
+### Prerequisites checklist
 
-## Part 1 — One-time setup (skip if already done)
+Before running any commands, have these ready:
 
-Only runs the **first time** you add a second MCP. Migrates `refund-mcp` from port 80 to port 3000 and installs Caddy as a reverse proxy.
+- [ ] IT has created `<SUBDOMAIN>` with HTTPS → VPS `52.55.66.40:80` forwarding
+- [ ] Turso DB created, URL + token in hand
+- [ ] MCP repo pushed to Git with a working `scripts/setup.sh` (adapt from refund-crisp-mcp if missing)
+- [ ] `<PORT>` is free (`ss -tlnp | grep :30` to confirm nothing else is listening)
+- [ ] DNS resolves — run `getent hosts <SUBDOMAIN>` and expect `52.55.66.40`
 
-### 1.1 Move refund-mcp to port 3000
+### Step 1 — Clone the repo
+
+SSH into the VPS via Teleport as `root`, then:
 
 ```bash
-sed -i 's/^PORT=.*/PORT=3000/' /opt/mcp/refund/.env
+git clone <REPO_URL> /opt/mcp/<NAME>
 ```
 
 ```bash
-pm2 restart refund-mcp
+cd /opt/mcp/<NAME>
+```
+
+### Step 2 — Create `.env`
+
+Use `nano` (installed globally) — safer than heredocs in the Teleport web terminal:
+
+```bash
+nano /opt/mcp/<NAME>/.env
+```
+
+Paste content:
+
+```env
+TURSO_DATABASE_URL=<TURSO_URL>
+TURSO_AUTH_TOKEN=<TURSO_TOKEN>
+PORT=<PORT>
+```
+
+Save with `Ctrl+O` → Enter → `Ctrl+X`.
+
+If the MCP also writes back to Crisp (e.g. `tag_case`-style tools), add:
+
+```env
+CRISP_WEBSITE_ID=7cd1799e-e8eb-476e-8cb7-33778fc41c2a
+CRISP_IDENTIFIER=<plugin-identifier>
+CRISP_KEY=<plugin-key>
+```
+
+Lock the file permissions:
+
+```bash
+chmod 600 /opt/mcp/<NAME>/.env
+```
+
+### Step 3 — Build and start
+
+If the repo has `scripts/setup.sh`:
+
+```bash
+bash /opt/mcp/<NAME>/scripts/setup.sh
+```
+
+The script installs Node/PM2 if missing, runs `npm ci && npm run build`, registers a PM2 process named `<NAME>-mcp`, and registers it as a systemd service.
+
+Fallback when there's no setup script:
+
+```bash
+cd /opt/mcp/<NAME> && npm ci && npm run build
 ```
 
 ```bash
-pm2 logs refund-mcp --lines 5 --nostream
-```
-
-Verify the log shows `Refund MCP Server running on http://localhost:3000/mcp`.
-
-### 1.2 Install Caddy
-
-```bash
-apt install -y debian-keyring debian-keyring-keyring apt-transport-https curl
+pm2 start npm --name <NAME>-mcp -- run start
 ```
 
 ```bash
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+pm2 save
+```
+
+Verify the process is online:
+
+```bash
+pm2 status
 ```
 
 ```bash
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' > /etc/apt/sources.list.d/caddy-stable.list
+curl -s http://localhost:<PORT>/health && echo
 ```
 
+Must return `OK`.
+
+### Step 4 — Add Caddy route
+
+Edit the Caddyfile:
+
 ```bash
-apt update && apt install -y caddy
+nano /etc/caddy/Caddyfile
 ```
 
-### 1.3 Write the Caddyfile
+The current file looks like this:
 
-Heredoc — one command, Teleport-safe:
-
-```bash
-cat > /etc/caddy/Caddyfile <<'EOF'
+```caddy
 {
     auto_https off
 }
@@ -88,123 +162,35 @@ cat > /etc/caddy/Caddyfile <<'EOF'
         respond "Unknown host" 404
     }
 }
-EOF
 ```
 
-`auto_https off` disables Caddy's own HTTPS — IT's edge handles HTTPS termination, Caddy only serves plain HTTP on port 80.
+Add a new matcher + handle block **above** the catch-all `handle { respond ... }`. After editing, the file should look like:
 
-### 1.4 Reload Caddy
+```caddy
+{
+    auto_https off
+}
 
-```bash
-systemctl reload caddy
+:80 {
+    @refund host refund-mcp.pagefly.io
+    handle @refund {
+        reverse_proxy localhost:3000
+    }
+
+    @<NAME> host <SUBDOMAIN>
+    handle @<NAME> {
+        reverse_proxy localhost:<PORT>
+    }
+
+    handle {
+        respond "Unknown host" 404
+    }
+}
 ```
 
-```bash
-systemctl status caddy --no-pager | head -10
-```
+Save with `Ctrl+O` → Enter → `Ctrl+X`.
 
-Must show `active (running)`.
-
-### 1.5 Verify refund-mcp still works
-
-```bash
-curl -s -H "Host: refund-mcp.pagefly.io" http://localhost/health && echo
-```
-
-Must print `OK`.
-
-From your laptop (VPN off):
-
-```powershell
-curl.exe https://refund-mcp.pagefly.io/health
-```
-
-Must return `OK`. If yes, existing Crisp integration keeps working — Part 1 done.
-
----
-
-## Part 2 — Deploy the second MCP
-
-For every new MCP, repeat this section. Replace:
-
-- `<NAME>` → short name, e.g. `sales`
-- `<PORT>` → unused local port, e.g. `3001`, `3002`, …
-- `<SUBDOMAIN>` → domain from IT, e.g. `sales-mcp.pagefly.io`
-- `<REPO_URL>` → Git URL of the new MCP
-- `<TURSO_URL>` and `<TURSO_TOKEN>` → new Turso DB credentials
-
-### 2.1 Clone the repo
-
-```bash
-git clone <REPO_URL> /opt/mcp/<NAME>
-```
-
-```bash
-cd /opt/mcp/<NAME>
-```
-
-### 2.2 Create `.env`
-
-If the token is very long (JWT), split into chunks to work around Teleport's paste limit. For shorter configs, one heredoc is fine:
-
-```bash
-cat > /opt/mcp/<NAME>/.env <<'EOF'
-TURSO_DATABASE_URL=<TURSO_URL>
-TURSO_AUTH_TOKEN=<TURSO_TOKEN>
-PORT=<PORT>
-EOF
-```
-
-```bash
-chmod 600 /opt/mcp/<NAME>/.env
-```
-
-### 2.3 Build and start
-
-If the repo has `scripts/setup.sh` (like `refund-mcp`):
-
-```bash
-bash /opt/mcp/<NAME>/scripts/setup.sh
-```
-
-Otherwise, do it manually:
-
-```bash
-cd /opt/mcp/<NAME> && npm ci && npm run build
-```
-
-```bash
-pm2 start npm --name <NAME>-mcp -- run start
-```
-
-```bash
-pm2 save
-```
-
-### 2.4 Add Caddy route
-
-Append a new block to `/etc/caddy/Caddyfile` **before the final `handle { respond ... }`** block.
-
-Use `sed` to insert right above the catch-all handler:
-
-```bash
-sed -i '/^    handle {$/i\
-    @<NAME> host <SUBDOMAIN>\
-    handle @<NAME> {\
-        reverse_proxy localhost:<PORT>\
-    }\
-' /etc/caddy/Caddyfile
-```
-
-Verify manually:
-
-```bash
-cat /etc/caddy/Caddyfile
-```
-
-The file should now contain both `@refund` and `@<NAME>` matchers.
-
-### 2.5 Reload Caddy
+Validate and reload:
 
 ```bash
 caddy validate --config /etc/caddy/Caddyfile
@@ -216,7 +202,7 @@ Must print `Valid configuration`. If not, fix the syntax before reloading.
 systemctl reload caddy
 ```
 
-### 2.6 Verify
+### Step 5 — Verify end-to-end
 
 From the VPS:
 
@@ -224,15 +210,17 @@ From the VPS:
 curl -s -H "Host: <SUBDOMAIN>" http://localhost/health && echo
 ```
 
-From your laptop (VPN off):
+Must return `OK` (and the same for `refund-mcp.pagefly.io` — existing MCP must not be broken).
+
+From your laptop with VPN **off**:
 
 ```powershell
 curl.exe https://<SUBDOMAIN>/health
 ```
 
-Both must return `OK`.
+Must return `OK`.
 
-MCP endpoint smoke test:
+MCP endpoint smoke:
 
 ```powershell
 curl.exe -X POST https://<SUBDOMAIN>/mcp -H "Content-Type: application/json" -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}"
@@ -240,17 +228,25 @@ curl.exe -X POST https://<SUBDOMAIN>/mcp -H "Content-Type: application/json" -d 
 
 Must return a JSON list of tools.
 
-### 2.7 Add to Crisp
+### Step 6 — Connect to Crisp
 
 1. app.crisp.chat → **AI Agent → Automate → Integrations & MCP → External MCP servers**
 2. **Add MCP server** → URL `https://<SUBDOMAIN>/mcp` → name it → **Refresh tools from server** → enable → save
 3. Test in **Playground**
 
+### Step 7 — Update the port allocation table
+
+Come back to this file and mark `<PORT>` as taken:
+
+```
+| 3001 | sales-mcp (active since 2026-04-25) |
+```
+
+Commit the change so the next deploy sees the right starting port.
+
 ---
 
-## Updating an MCP after deploy
-
-Whenever the code changes:
+## Updating an MCP after it's deployed
 
 ```bash
 cd /opt/mcp/<NAME>
@@ -264,7 +260,38 @@ git pull
 bash scripts/setup.sh
 ```
 
-(or `npm ci && npm run build && pm2 reload <NAME>-mcp` if no setup script).
+(or `npm ci && npm run build && pm2 reload <NAME>-mcp` without the setup script).
+
+**Env vars changed**: after editing `.env`, use `pm2 restart` instead of `reload` so Node picks up the new values:
+
+```bash
+nano /opt/mcp/<NAME>/.env
+pm2 restart <NAME>-mcp
+```
+
+---
+
+## Rolling back a broken MCP
+
+If the new MCP crashes or breaks the Caddyfile:
+
+```bash
+pm2 stop <NAME>-mcp && pm2 delete <NAME>-mcp && pm2 save
+```
+
+Remove the `@<NAME>` + matching `handle` block from `/etc/caddy/Caddyfile`, then:
+
+```bash
+caddy validate --config /etc/caddy/Caddyfile && systemctl reload caddy
+```
+
+Delete the folder when you're ready to clean up:
+
+```bash
+rm -rf /opt/mcp/<NAME>
+```
+
+`refund-mcp` keeps running the whole time.
 
 ---
 
@@ -272,13 +299,22 @@ bash scripts/setup.sh
 
 ### `502 Bad Gateway` from the edge
 
-Caddy got the request but cannot reach the upstream Node process.
+Caddy reached, but the upstream Node process is down.
 
 ```bash
 pm2 status
+pm2 logs <NAME>-mcp --lines 50 --nostream
 ```
 
-If the app is not `online` → check `pm2 logs <NAME>-mcp` for a crash.
+Common causes: app crashed on boot (bad `.env`), port conflict, DB unreachable.
+
+### `Unknown host` response
+
+Request reached Caddy but `Host` header doesn't match any matcher. Usually the `@<NAME>` block is missing or the subdomain doesn't match.
+
+```bash
+curl -sI -H "Host: <SUBDOMAIN>" http://localhost/
+```
 
 ### Caddy reload fails
 
@@ -286,54 +322,67 @@ If the app is not `online` → check `pm2 logs <NAME>-mcp` for a crash.
 caddy validate --config /etc/caddy/Caddyfile
 ```
 
-Reveals the syntax error. Fix it, reload.
-
-### `Unknown host` response
-
-Request reached Caddy but the `Host` header doesn't match any matcher.
-
-```bash
-curl -sI -H "Host: <SUBDOMAIN>" http://localhost/
-```
-
-If this still fails, the `@<NAME>` matcher is missing or misspelled in the Caddyfile.
+Points at the exact line with a syntax error. Fix and reload.
 
 ### DNS not resolving
 
-IT hasn't finished the edge setup, or DNS hasn't propagated yet. Wait 5–30 min and retry:
+IT hasn't finished the edge setup, or DNS is still propagating. Wait 5–30 min.
 
 ```bash
 getent hosts <SUBDOMAIN>
 ```
 
-Must resolve to `52.55.66.40` (or the public IP of the VPS).
+Must resolve to `52.55.66.40`.
 
-### VPN issue
+### HTTPS works off-VPN, fails on VPN
 
-If `curl https://<SUBDOMAIN>` works without VPN but fails on VPN → split-horizon DNS / routing. Normal behaviour, ignore — Crisp reaches the endpoint from the public internet, not via your VPN.
+Normal. VPN split-horizon DNS routes you internally while Crisp always hits the public edge. Ignore for MCP purposes.
+
+### Port `<PORT>` already in use
+
+```bash
+ss -tlnp | grep :<PORT>
+```
+
+Pick a different port. Update `.env` (`PORT=<NEW>`), `pm2 restart <NAME>-mcp`, and the Caddy `reverse_proxy` line.
 
 ---
 
-## Rollback
+## Resource notes
 
-If the new MCP is broken and you need to revert to just `refund-mcp`:
+`pf-support` has 7.7 GB RAM / 40 GB SSD. Each MCP uses ~150 MB RAM under load plus ~30 MB for Caddy. Comfortable for 5+ MCPs. If you see sustained memory pressure in `free -h`, ask IT to bump RAM.
 
-```bash
-pm2 stop <NAME>-mcp && pm2 delete <NAME>-mcp && pm2 save
-```
-
-Remove the `@<NAME>` and matching `handle` block from `/etc/caddy/Caddyfile`, then:
-
-```bash
-systemctl reload caddy
-```
-
-The refund-mcp route stays intact. Delete the `/opt/mcp/<NAME>` folder when you're ready.
+Turso free tier covers 500 DBs and 25 M writes/month per account — well beyond anything we'll need here.
 
 ---
 
-## Resource planning
+## Part 1 reference — one-time infra (already done)
 
-A VPS with **2 GB RAM / 1 vCPU / 20 GB SSD** comfortably runs 3 MCPs (each ~150 MB RAM under load plus ~30 MB for Caddy). Beyond 5 MCPs, bump to 4 GB / 2 vCPU.
+> This section is historical — the commands ran on 2026-04-21 during the first multi-MCP migration. Only re-run them if the VPS is rebuilt from scratch.
 
-Turso free tier covers 500 databases, 9 GB storage, 25 M writes/month per account — well within limits for dozens of MCPs.
+1. **Move refund-mcp to port 3000**
+
+   ```bash
+   sed -i 's/^PORT=.*/PORT=3000/' /opt/mcp/refund/.env
+   pm2 restart refund-mcp
+   ```
+
+2. **Install Caddy**
+
+   ```bash
+   apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
+   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' > /etc/apt/sources.list.d/caddy-stable.list
+   apt update && apt install -y caddy
+   ```
+
+3. **Create the initial `/etc/caddy/Caddyfile`** with only the refund route (block at the top of Part 2 Step 4).
+
+4. **Restart Caddy** and verify refund-mcp still responds externally:
+
+   ```bash
+   systemctl restart caddy
+   curl https://refund-mcp.pagefly.io/health
+   ```
+
+Total time on the live VPS: ~5 minutes, no data loss, ~30 s downtime while Caddy replaced the direct Node-on-port-80 binding.
