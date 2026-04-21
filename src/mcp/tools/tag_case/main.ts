@@ -23,23 +23,20 @@ function registerTagCaseTool(server: McpServer): void {
   server.registerTool(
     "tag_case",
     {
-      title       : "Tag Crisp conversation",
+      title       : "Tag Crisp conversation as refund",
       description : `
-        Use this tool to attach a segment/tag to the current Crisp conversation
-        so the refund pipeline stays visible from the Crisp dashboard.
+        Use this tool to attach the "refund" segment to the current Crisp
+        conversation so every refund case is filterable from the Crisp
+        dashboard.
 
-        Common use-cases include:
-        - Marking a conversation as "refund-done" after a successful refund
-          (matches the post-refund checklist step)
-        - Marking "refund-awaiting-manager" while waiting for Boo's approval
-        - Marking "escalated" when handing off to a Shift Manager
-        - Marking "refund-rejected" when the refund was declined
+        Call this tool as soon as you identify that the conversation is
+        about a refund — usually right after "get_case_state" on the first
+        turn, or after "classify_refund_case" on a later turn.
 
-        Call this tool after "save_case_state" whenever the case reaches a
-        milestone that the ops team should be able to filter on in Crisp.
-
-        Existing tags on the conversation are preserved — this tool adds to
-        the segments array rather than replacing it.
+        The tag is constant ("refund") — no arguments other than the Crisp
+        session ID are needed. Existing tags on the conversation are
+        preserved; calling this tool multiple times on the same conversation
+        is safe (idempotent).
       `,
       inputSchema  : TAG_CASE_INPUT_SHAPE,
       outputSchema : TAG_CASE_OUTPUT_SHAPE,

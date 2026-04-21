@@ -36,8 +36,8 @@ function createMcpServer(): McpServer {
           (collect_refund_info)
         - Draft the customer-facing reply combining the PageFly refund templates
           (generate_refund_message)
-        - Attach a status tag (refund-done, refund-awaiting-manager, etc.) to the
-          current Crisp conversation so ops can filter the pipeline (tag_case)
+        - Attach the "refund" segment to the current Crisp conversation so
+          ops can filter refund cases from the Crisp dashboard (tag_case)
 
         Typical flow:
           get_case_state → collect_refund_info → check_subscription →
@@ -50,8 +50,9 @@ function createMcpServer(): McpServer {
         pending, bill still Upcoming, etc.). Call get_case_state at the start
         of a conversation and save_case_state after every meaningful step.
 
-        After each milestone, call tag_case with the matching label so the
-        Crisp dashboard reflects the case status without manual tagging.
+        Call tag_case once per refund conversation (idempotent) so every
+        refund case carries the "refund" segment and the ops team can filter
+        them from the Crisp dashboard without manual tagging.
 
         All refunds follow a 30-day cycle and PageFly's deduction policy
         (0% full refund when a team member has committed, 20% default, 40% for

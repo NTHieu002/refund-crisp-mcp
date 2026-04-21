@@ -32,7 +32,7 @@ If the customer disappears and comes back a day later, Hugo calls `get_case_stat
 - **`list_pending_cases`** — review cases by stage (e.g. `awaiting_manager`, `awaiting_customer_confirm`)
 
 ### Crisp side-effects — write back into the Crisp conversation
-- **`tag_case`** — attach a status segment (`refund-done`, `refund-awaiting-manager`, `escalated`, …) to the Crisp conversation via the REST API
+- **`tag_case`** — attach the `refund` segment to the Crisp conversation so every refund case is filterable from the dashboard
 
 ---
 
