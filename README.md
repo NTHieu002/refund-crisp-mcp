@@ -14,7 +14,7 @@ If the customer disappears and comes back a day later, Hugo calls `get_case_stat
 
 ---
 
-## Tools (9 total)
+## Tools (10 total)
 
 ### Lookup — mock data today, swap for real API in production
 - **`check_subscription`** — subscription status, plan, price, cycle window (input: `store_url` or `email`)
@@ -30,6 +30,9 @@ If the customer disappears and comes back a day later, Hugo calls `get_case_stat
 - **`get_case_state`** — load a case by `store_url`
 - **`save_case_state`** — partial upsert (all 50+ fields optional, merges with existing row)
 - **`list_pending_cases`** — review cases by stage (e.g. `awaiting_manager`, `awaiting_customer_confirm`)
+
+### Crisp side-effects — write back into the Crisp conversation
+- **`tag_case`** — attach a status segment (`refund-done`, `refund-awaiting-manager`, `escalated`, …) to the Crisp conversation via the REST API
 
 ---
 
@@ -75,6 +78,11 @@ Copy `.env.example` to `.env` and fill in your Turso credentials:
 TURSO_DATABASE_URL=libsql://<your-db>.turso.io
 TURSO_AUTH_TOKEN=<token>
 PORT=3000
+
+# Crisp plugin — required by tag_case (and any future write-back tools)
+CRISP_WEBSITE_ID=<website-uuid>
+CRISP_IDENTIFIER=<plugin-identifier>
+CRISP_KEY=<plugin-key>
 ```
 
 **No Turso account yet?** Sign up at [turso.tech](https://turso.tech), `turso db create refund-case`, `turso db tokens create refund-case --expiration none`.

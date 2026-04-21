@@ -13,6 +13,7 @@ import { registerGenerateRefundMessageTool } from "@/mcp/tools/generate_refund_m
 import { registerGetCaseStateTool }         from "@/mcp/tools/get_case_state/main.js";
 import { registerSaveCaseStateTool }        from "@/mcp/tools/save_case_state/main.js";
 import { registerListPendingCasesTool }     from "@/mcp/tools/list_pending_cases/main.js";
+import { registerTagCaseTool }              from "@/mcp/tools/tag_case/main.js";
 
 /**************************************************************************
  * MAIN
@@ -34,6 +35,9 @@ function registerTools(server: McpServer): void {
   registerGetCaseStateTool(server);
   registerSaveCaseStateTool(server);
   registerListPendingCasesTool(server);
+
+  // Crisp side-effect tools — write back into the Crisp conversation
+  registerTagCaseTool(server);
 }
 
 /**************************************************************************
