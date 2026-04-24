@@ -28,13 +28,19 @@ function toInt(value: boolean | undefined): number | undefined {
 // Fire-and-forget tag on Crisp. A missing tag is less bad than a failed save,
 // so we swallow errors and only log them to the console.
 async function tagConversationBestEffort(sessionId: string | undefined): Promise<void> {
-  if (!sessionId) return;
+  if (!sessionId) {
+    console.log("[save_case_state] auto-tag SKIP — no crisp_conversation_id in payload");
+    return;
+  }
+
+  console.log(`[save_case_state] auto-tag START session=${sessionId}`);
 
   try {
-    await addConversationTags(sessionId, [REFUND_TAG]);
+    const segments = await addConversationTags(sessionId, [REFUND_TAG]);
+    console.log(`[save_case_state] auto-tag OK  session=${sessionId} segments=${JSON.stringify(segments)}`);
   } catch (error) {
     console.error(
-      "[save_case_state] auto-tag failed:",
+      `[save_case_state] auto-tag FAIL session=${sessionId}:`,
       error instanceof Error ? error.message : error,
     );
   }

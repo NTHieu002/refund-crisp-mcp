@@ -12,8 +12,12 @@ import type { TagCaseInput, TagCaseOutput } from "@/mcp/tools/tag_case/shapes.js
  ***************************************************************************/
 
 async function tagCaseHandler(input: TagCaseInput): Promise<TagCaseOutput> {
+  console.log(`[tag_case] START session=${input.crisp_session_id}`);
+
   try {
     const all_segments = await addConversationTags(input.crisp_session_id, [REFUND_TAG]);
+
+    console.log(`[tag_case] OK  session=${input.crisp_session_id} segments=${JSON.stringify(all_segments)}`);
 
     return {
       success      : true,
@@ -21,10 +25,14 @@ async function tagCaseHandler(input: TagCaseInput): Promise<TagCaseOutput> {
       error        : null,
     };
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+
+    console.error(`[tag_case] FAIL session=${input.crisp_session_id}: ${message}`);
+
     return {
       success      : false,
       all_segments : [],
-      error        : error instanceof Error ? error.message : String(error),
+      error        : message,
     };
   }
 }
