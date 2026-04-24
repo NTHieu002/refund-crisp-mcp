@@ -47,6 +47,10 @@ app.post("/mcp", (req, res) => {
     mcpLogger("out", { statusCode: res.statusCode });
   });
 
+  // Temporarily log all headers so we can see how Crisp passes the conversation
+  // session ID (e.g. X-Crisp-Session-Id, Mcp-Session-Id, ...).
+  console.log("[mcp-headers]", JSON.stringify(req.headers));
+
   mcpLogger("in", req.body);
 
   server
