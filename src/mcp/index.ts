@@ -44,6 +44,14 @@ function createMcpServer(): McpServer {
           get_billing_history → classify_refund_case → calculate_refund →
           generate_refund_message → save_case_state → tag_case
 
+        HARD GATE — never skip:
+        call "collect_refund_info" at the start of every customer turn and obey
+        "next_question" verbatim (including any URLs). Do NOT compute or quote a
+        refund amount (no "calculate_refund", no "generate_refund_message") until
+        "collect_refund_info" returns "ready_to_process: true", i.e. all of
+        refund_reason + store_url + billing_invoice + bank_confirmation are
+        collected AND no blocker is active.
+
         State tools (get_case_state, save_case_state, list_pending_cases) persist
         case data in Turso so that if a customer returns a day later, the AI
         resumes exactly where it left off (winback already offered, manager

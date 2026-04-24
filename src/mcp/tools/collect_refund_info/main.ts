@@ -36,7 +36,13 @@ function registerCollectRefundInfoTool(server: McpServer): void {
           with an explanation the agent can relay to the customer
         - Knowing when the case is fully collected and ready for "calculate_refund"
 
-        Call this tool at any point in the conversation to decide the next step.
+        IMPORTANT: call this tool at the start of every customer turn and follow its
+        "next_question" verbatim — do NOT quote a refund amount or call
+        "calculate_refund" / "generate_refund_message" until it returns
+        "ready_to_process: true". The tool enforces the PageFly playbook order:
+        refund_reason → store_url → billing_invoice → bank_confirmation. Send any
+        URLs inside "next_question" to the customer exactly as provided (they are
+        visual guides the customer will see as inline images).
       `,
       inputSchema  : COLLECT_REFUND_INFO_INPUT_SHAPE,
       outputSchema : COLLECT_REFUND_INFO_OUTPUT_SHAPE,

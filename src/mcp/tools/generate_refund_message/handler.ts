@@ -12,7 +12,7 @@ import type {
  ***************************************************************************/
 
 const INTRO_DEFAULT = (name: string) =>
-  `Hi ${name}, I'm Hew from the PageFly team. Thank you for your patience as we reviewed your request.`;
+  `Hi ${name}, thanks for your patience while we reviewed your refund request.`;
 
 const INTRO_ANGRY = () =>
   "First of all, I sincerely apologize for the inconvenience you experienced. I completely understand how frustrating this situation must be for you, and I'm truly sorry for the trouble it has caused.";

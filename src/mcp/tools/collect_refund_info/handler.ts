@@ -11,9 +11,11 @@ import type {
  * CONSTANTS
  ***************************************************************************/
 
+const STORE_URL_GUIDE_IMAGE = "https://monosnap.ai/direct/S6onmmJVh0bgVTfmo0WGl2p7f4Y7gR";
+
 const QUESTIONS: Record<string, string> = {
   store_url :
-    "Could you share your Shopify store URL (the one ending in .myshopify.com) so we can look up the subscription?",
+    `Could you share your Shopify store URL (the one ending in .myshopify.com) so we can look up the subscription? You can find it in your Shopify Admin — here's a quick visual guide: ${STORE_URL_GUIDE_IMAGE}`,
   billing_invoice :
     "Could you share your Shopify billing invoice? You can find it at Shopify Admin → Settings → Billing → Bills. A screenshot or PDF showing the PageFly charge is perfect.",
   refund_reason :
