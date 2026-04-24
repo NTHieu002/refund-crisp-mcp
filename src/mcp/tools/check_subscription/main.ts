@@ -41,7 +41,7 @@ function registerCheckSubscriptionTool(server: McpServer): void {
       outputSchema : CHECK_SUBSCRIPTION_OUTPUT_SHAPE,
     },
     async (input: CheckSubscriptionInput) => {
-      const output: CheckSubscriptionOutput = checkSubscriptionHandler(input);
+      const output: CheckSubscriptionOutput = await checkSubscriptionHandler(input);
 
       return {
         content : [

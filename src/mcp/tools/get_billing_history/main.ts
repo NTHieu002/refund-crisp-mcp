@@ -41,7 +41,7 @@ function registerGetBillingHistoryTool(server: McpServer): void {
       outputSchema : GET_BILLING_HISTORY_OUTPUT_SHAPE,
     },
     async (input: GetBillingHistoryInput) => {
-      const output: GetBillingHistoryOutput = getBillingHistoryHandler(input);
+      const output: GetBillingHistoryOutput = await getBillingHistoryHandler(input);
 
       return {
         content : [
