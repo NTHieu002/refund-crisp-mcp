@@ -55,7 +55,16 @@ function createMcpServer(): McpServer {
         2. Call "tag_case" on the FIRST turn you identify the conversation as
            a refund — before any clarifying question — and again on every turn
            that calls "save_case_state". It is idempotent; skipping it leaves
-           the case untagged in Crisp and breaks ops filtering.
+           the case untagged in Crisp and breaks ops filtering. Trigger on any
+           refund-adjacent intent (refund, cancel, unsubscribe, downgrade,
+           double charge, auto-upgrade, "hoàn tiền", "hủy gói", etc.) —
+           over-tagging is safe, under-tagging is not.
+
+        Side effects: "save_case_state" also auto-tags the conversation and
+        logs a row to the ops sheet on every successful save, so even if
+        Hugo forgets to call "tag_case" directly, the DB save acts as a
+        safety net. This does NOT remove the obligation above — tagging on
+        turn 1 keeps the Crisp dashboard filter accurate in real-time.
 
         State tools (get_case_state, save_case_state, list_pending_cases) persist
         case data in Turso so that if a customer returns a day later, the AI

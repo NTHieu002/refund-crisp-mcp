@@ -29,12 +29,19 @@ function registerTagCaseTool(server: McpServer): void {
         conversation so every refund case is filterable from the Crisp
         dashboard.
 
-        MANDATORY: call this tool on the FIRST turn where the conversation is
-        identified as a refund request — right after "get_case_state", before
-        you ask any clarifying question. Also call it again together with
-        "save_case_state" on every subsequent turn as a safety net. The
-        call is idempotent (existing tags preserved, "refund" deduped) so
-        calling it multiple times has no cost.
+        MANDATORY — call this tool IMMEDIATELY, before any other action, the
+        moment you detect the customer is talking about a refund-related
+        problem. Trigger phrases include (non-exhaustive): refund, "money
+        back", cancel, unsubscribe, downgrade, "stop charges", chargeback,
+        "wrong charge", "double charge", "auto-upgrade", overcharge, "hoàn
+        tiền", "hủy gói", "trả lại tiền". If in doubt, tag — it is cheaper
+        to over-tag than to miss a real refund case.
+
+        Call order on turn 1 of a refund conversation:
+          get_case_state → tag_case → collect_refund_info → ...
+        Also call again on every subsequent turn alongside "save_case_state"
+        as a safety net. The call is idempotent (existing tags preserved,
+        "refund" deduped) so over-calling has no cost.
 
         A successful call returns "success: true" with the updated segments
         list. If it returns "success: false", retry once and surface the

@@ -3,6 +3,9 @@
  ***************************************************************************/
 
 import { upsertCase } from "@/db/cases.js";
+import { addConversationTags } from "@/crisp/client.js";
+import { logRefundCase } from "@/log/client.js";
+import { REFUND_TAG } from "@/mcp/tools/tag_case/shapes.js";
 
 import type {
   SaveCaseStateInput,
@@ -20,6 +23,21 @@ function toInt(value: boolean | undefined): number | undefined {
   }
 
   return value ? 1 : 0;
+}
+
+// Fire-and-forget tag on Crisp. A missing tag is less bad than a failed save,
+// so we swallow errors and only log them to the console.
+async function tagConversationBestEffort(sessionId: string | undefined): Promise<void> {
+  if (!sessionId) return;
+
+  try {
+    await addConversationTags(sessionId, [REFUND_TAG]);
+  } catch (error) {
+    console.error(
+      "[save_case_state] auto-tag failed:",
+      error instanceof Error ? error.message : error,
+    );
+  }
 }
 
 /**************************************************************************
@@ -108,6 +126,11 @@ async function saveCaseStateHandler(
     };
 
     const saved = await upsertCase(input.store_url, updates);
+
+    // Side effects run after a successful DB write. Both are best-effort so
+    // Hugo's save-path never fails on an external outage.
+    void tagConversationBestEffort(input.crisp_conversation_id);
+    void logRefundCase({ ...saved });
 
     return {
       success : true,
