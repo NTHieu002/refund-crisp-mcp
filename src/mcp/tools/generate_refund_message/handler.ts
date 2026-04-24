@@ -113,6 +113,26 @@ Please let us know if you'd like us to proceed with this refund amount.`;
 function generateRefundMessageHandler(
   input: GenerateRefundMessageInput,
 ): GenerateRefundMessageOutput {
+  // Handler-level gate: refuse to draft any customer-facing message until the
+  // playbook prerequisites are collected. This stops Hugo quoting a refund
+  // amount before billing invoice + bank confirmation have been shared.
+  const missing: string[] = [];
+
+  if (!input.has_billing_invoice) missing.push("billing_invoice");
+  if (!input.has_bank_confirmation) missing.push("bank_confirmation");
+
+  if (missing.length > 0) {
+    return {
+      message :
+        `BLOCKED — do NOT send this to the customer. ` +
+        `Missing items: ${missing.join(", ")}. ` +
+        `Call collect_refund_info and ask the customer for the missing items first, ` +
+        `then retry generate_refund_message after save_case_state records the flags as true.`,
+      needs_customer_confirm : false,
+      needs_manager_approve  : false,
+    };
+  }
+
   const parts: string[] = [];
 
   parts.push(input.is_angry ? INTRO_ANGRY() : INTRO_DEFAULT(input.customer_name));

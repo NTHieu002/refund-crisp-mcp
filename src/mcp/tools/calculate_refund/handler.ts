@@ -52,6 +52,34 @@ function describeDeduction(percent: number): string {
 function calculateRefundHandler(
   input: CalculateRefundInput,
 ): CalculateRefundOutput {
+  // Hard gate: refuse to compute until the playbook info is complete.
+  // Handler-level enforcement because tool descriptions alone are routinely
+  // ignored by the upstream agent.
+  const missing: string[] = [];
+
+  if (!input.has_billing_invoice) missing.push("billing_invoice");
+  if (!input.has_bank_confirmation) missing.push("bank_confirmation");
+
+  if (missing.length > 0) {
+    const explanation =
+      `BLOCKED: cannot compute a refund until the customer has provided: ${missing.join(", ")}. ` +
+      `Call collect_refund_info and send its next_question to the customer. ` +
+      `Retry calculate_refund only after those items are collected.`;
+
+    return {
+      charge_per_cycle    : input.charge_amount,
+      total_charge        : 0,
+      days_used           : 0,
+      days_unused         : 0,
+      prorated_amount     : 0,
+      deduction_amount    : 0,
+      deduction_reason    : "blocked — preconditions not met",
+      refund_amount       : 0,
+      refund_per_cycle    : 0,
+      formula_explanation : explanation,
+    };
+  }
+
   const deduction = clamp(input.deduction_percent, 0, 100);
   const cycles    = Math.max(1, Math.floor(input.num_cycles));
 

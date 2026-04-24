@@ -42,6 +42,16 @@ const GENERATE_REFUND_MESSAGE_INPUT_SHAPE = {
   bill_status        : z
     .enum(["paid", "upcoming"])
     .describe("Current bill status. TH4 appends the two-option block when Upcoming."),
+  has_billing_invoice : z
+    .boolean()
+    .describe(
+      "Required. Pass true only if the customer has already shared their Shopify billing invoice. Pass false otherwise — the tool will refuse to draft the message.",
+    ),
+  has_bank_confirmation : z
+    .boolean()
+    .describe(
+      "Required. Pass true only if the customer has already confirmed their bank account / payment method. Pass false otherwise — the tool will refuse.",
+    ),
 } satisfies ZodRawShape;
 
 /**************************************************************************

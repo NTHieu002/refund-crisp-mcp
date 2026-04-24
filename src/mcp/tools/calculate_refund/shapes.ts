@@ -37,6 +37,16 @@ const CALCULATE_REFUND_INPUT_SHAPE = {
     .describe(
       "Number of cycles to refund. 1 means prorated refund of the current cycle. 2+ means full refund of past cycles minus the deduction.",
     ),
+  has_billing_invoice : z
+    .boolean()
+    .describe(
+      "Required. Pass true only if the customer has already shared their Shopify billing invoice (screenshot or PDF). Pass false otherwise — the tool will refuse to compute and instruct you to collect it first.",
+    ),
+  has_bank_confirmation : z
+    .boolean()
+    .describe(
+      "Required. Pass true only if the customer has already confirmed their bank account / payment method for the refund. Pass false otherwise — the tool will refuse.",
+    ),
 } satisfies ZodRawShape;
 
 /**************************************************************************
