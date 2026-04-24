@@ -47,6 +47,11 @@ const CALCULATE_REFUND_INPUT_SHAPE = {
     .describe(
       "Required. Pass true only if the customer has already confirmed their bank account / payment method for the refund. Pass false otherwise — the tool will refuse.",
     ),
+  verified_downgrade_complete : z
+    .boolean()
+    .describe(
+      "Required. Pass true ONLY if you have verified via check_subscription that the customer's current plan is 'free' OR status is 'uninstalled' / 'cancelled'. Do NOT trust the customer's verbal claim (e.g. 'I just downgraded'). If check_subscription still reports a paid plan with status 'active', pass false — the tool will refuse and instruct you to ask the customer to downgrade first.",
+    ),
 } satisfies ZodRawShape;
 
 /**************************************************************************

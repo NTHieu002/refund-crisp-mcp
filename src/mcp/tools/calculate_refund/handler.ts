@@ -59,12 +59,15 @@ function calculateRefundHandler(
 
   if (!input.has_billing_invoice) missing.push("billing_invoice");
   if (!input.has_bank_confirmation) missing.push("bank_confirmation");
+  if (!input.verified_downgrade_complete) missing.push("downgrade_to_free (verified via check_subscription)");
 
   if (missing.length > 0) {
     const explanation =
-      `BLOCKED: cannot compute a refund until the customer has provided: ${missing.join(", ")}. ` +
+      `BLOCKED: cannot compute a refund until: ${missing.join("; ")}. ` +
       `Call collect_refund_info and send its next_question to the customer. ` +
-      `Retry calculate_refund only after those items are collected.`;
+      `If the store is still on a paid plan per check_subscription, ask the ` +
+      `customer to go to Shopify Admin → Apps → PageFly → Pricing → Switch to Free, ` +
+      `then re-run check_subscription to confirm before retrying.`;
 
     return {
       charge_per_cycle    : input.charge_amount,

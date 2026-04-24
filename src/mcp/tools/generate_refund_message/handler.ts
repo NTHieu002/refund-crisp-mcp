@@ -120,14 +120,16 @@ function generateRefundMessageHandler(
 
   if (!input.has_billing_invoice) missing.push("billing_invoice");
   if (!input.has_bank_confirmation) missing.push("bank_confirmation");
+  if (!input.verified_downgrade_complete) missing.push("downgrade_to_free (verified via check_subscription)");
 
   if (missing.length > 0) {
     return {
       message :
         `BLOCKED — do NOT send this to the customer. ` +
-        `Missing items: ${missing.join(", ")}. ` +
-        `Call collect_refund_info and ask the customer for the missing items first, ` +
-        `then retry generate_refund_message after save_case_state records the flags as true.`,
+        `Missing: ${missing.join("; ")}. ` +
+        `Collect the items via collect_refund_info. ` +
+        `If the plan is still paid per check_subscription, ask the customer to downgrade to the Free plan ` +
+        `(Shopify Admin → Apps → PageFly → Pricing → Switch to Free), then re-run check_subscription before retrying.`,
       needs_customer_confirm : false,
       needs_manager_approve  : false,
     };

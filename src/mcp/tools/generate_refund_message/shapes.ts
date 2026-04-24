@@ -52,6 +52,11 @@ const GENERATE_REFUND_MESSAGE_INPUT_SHAPE = {
     .describe(
       "Required. Pass true only if the customer has already confirmed their bank account / payment method. Pass false otherwise — the tool will refuse.",
     ),
+  verified_downgrade_complete : z
+    .boolean()
+    .describe(
+      "Required. Pass true ONLY if check_subscription has confirmed the customer's plan is 'free' OR status is 'uninstalled' / 'cancelled'. Do NOT trust a verbal claim like 'I just downgraded'. If the plan is still paid and active, pass false — the tool will refuse to draft the message.",
+    ),
 } satisfies ZodRawShape;
 
 /**************************************************************************
