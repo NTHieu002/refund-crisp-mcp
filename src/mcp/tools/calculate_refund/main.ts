@@ -41,6 +41,11 @@ function registerCalculateRefundTool(server: McpServer): void {
 
         Use this tool after "check_subscription" and "get_billing_history" have
         established the charge amount and current cycle window.
+
+        PRECONDITION: do NOT call this tool until "collect_refund_info" has
+        returned "ready_to_process: true" in the current conversation. If it
+        has not, go back and ask the customer for the missing items
+        (refund_reason, store_url, billing_invoice, bank_confirmation).
       `,
       inputSchema  : CALCULATE_REFUND_INPUT_SHAPE,
       outputSchema : CALCULATE_REFUND_OUTPUT_SHAPE,

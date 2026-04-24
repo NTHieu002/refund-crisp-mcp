@@ -29,14 +29,19 @@ function registerTagCaseTool(server: McpServer): void {
         conversation so every refund case is filterable from the Crisp
         dashboard.
 
-        Call this tool as soon as you identify that the conversation is
-        about a refund — usually right after "get_case_state" on the first
-        turn, or after "classify_refund_case" on a later turn.
+        MANDATORY: call this tool on the FIRST turn where the conversation is
+        identified as a refund request — right after "get_case_state", before
+        you ask any clarifying question. Also call it again together with
+        "save_case_state" on every subsequent turn as a safety net. The
+        call is idempotent (existing tags preserved, "refund" deduped) so
+        calling it multiple times has no cost.
+
+        A successful call returns "success: true" with the updated segments
+        list. If it returns "success: false", retry once and surface the
+        error to the support team — do NOT silently continue.
 
         The tag is constant ("refund") — no arguments other than the Crisp
-        session ID are needed. Existing tags on the conversation are
-        preserved; calling this tool multiple times on the same conversation
-        is safe (idempotent).
+        session ID are needed.
       `,
       inputSchema  : TAG_CASE_INPUT_SHAPE,
       outputSchema : TAG_CASE_OUTPUT_SHAPE,

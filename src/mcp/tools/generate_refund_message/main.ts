@@ -39,6 +39,11 @@ function registerGenerateRefundMessageTool(server: McpServer): void {
 
         Call this tool after "classify_refund_case" and "calculate_refund". The
         returned message should still be reviewed by the agent before being sent.
+
+        PRECONDITION: do NOT call this tool until "collect_refund_info" has
+        returned "ready_to_process: true". Quoting a refund amount before the
+        customer has shared refund_reason, store_url, billing_invoice and
+        bank_confirmation is a policy violation.
       `,
       inputSchema  : GENERATE_REFUND_MESSAGE_INPUT_SHAPE,
       outputSchema : GENERATE_REFUND_MESSAGE_OUTPUT_SHAPE,
