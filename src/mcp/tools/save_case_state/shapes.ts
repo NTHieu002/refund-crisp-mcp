@@ -45,7 +45,16 @@ const SAVE_CASE_STATE_INPUT_SHAPE = {
   // Identity
   customer_name         : z.string().optional(),
   customer_email        : z.email().optional(),
-  crisp_conversation_id : z.string().optional().describe("Crisp conversation ID, for linking back from the dashboard"),
+  crisp_conversation_id : z
+    .string()
+    .regex(
+      /^session_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+      "crisp_conversation_id must be the FULL session id of the CURRENT conversation (format: session_ + 36-char UUID). Do NOT truncate, do NOT append '...'.",
+    )
+    .optional()
+    .describe(
+      "The session ID of the Crisp conversation you are handling right now (session_ + lowercase UUID, 45 chars total). Pass it on every save — it is used to auto-tag the conversation as 'refund' and to log to the ops sheet. Pass the EXACT, FULL value; never a placeholder.",
+    ),
   assigned_agent        : z.string().optional().describe("Agent name currently handling the case"),
 
   // Classification

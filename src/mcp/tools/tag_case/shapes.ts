@@ -17,10 +17,22 @@ const REFUND_TAG = "refund";
  * INPUT
  ***************************************************************************/
 
+// Full Crisp session ID format: session_ + lowercase UUID (8-4-4-4-12 hex).
+// Regex enforcement rejects placeholder / truncated values like
+// "session_3d1ba9ea-..." that Hugo has been known to hallucinate.
+const CRISP_SESSION_ID_REGEX =
+  /^session_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
 const TAG_CASE_INPUT_SHAPE = {
   crisp_session_id : z
     .string()
-    .describe("Crisp conversation session ID (e.g. session_3d1ba9ea-...)"),
+    .regex(
+      CRISP_SESSION_ID_REGEX,
+      "crisp_session_id must be the FULL session id of the CURRENT conversation (format: session_ + 36-char UUID). Do NOT truncate, do NOT append '...', do NOT reuse an example value from a prior turn.",
+    )
+    .describe(
+      "The session ID of the Crisp conversation you are handling right now. Pass the EXACT, FULL value (session_ + lowercase UUID, 45 chars total). Never truncate; never reuse an ID from a previous conversation.",
+    ),
 } satisfies ZodRawShape;
 
 /**************************************************************************
