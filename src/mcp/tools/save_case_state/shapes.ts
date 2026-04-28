@@ -64,7 +64,12 @@ const SAVE_CASE_STATE_INPUT_SHAPE = {
     .enum(["refunded_full", "refunded_partial", "app_credit", "rejected", "abandoned"])
     .optional(),
   resolution_reason : z.string().optional(),
-  notes             : z.string().optional().describe("Free-form internal notes"),
+  notes             : z
+    .string()
+    .optional()
+    .describe(
+      "Free-form internal notes. When the customer mentions WHY they uninstalled or downgraded PageFly (e.g. price, missing feature, switching to competitor, temporary pause, business closed), prepend the line '[uninstall_reason] <verbatim quote or short paraphrase>' so the ops team can grep for it later. Keep the prefix exact for downstream filtering.",
+    ),
 
   // Refund math snapshot
   plan_name         : z.string().optional(),

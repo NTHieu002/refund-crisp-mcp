@@ -41,6 +41,13 @@ function registerSaveCaseStateTool(server: McpServer): void {
 
         Call this tool any time you make meaningful progress on the case, so that if
         the customer returns a day later the full state is already there.
+
+        Uninstall reason: when the customer tells you why they cancelled, downgraded,
+        or uninstalled PageFly, capture it in the "notes" field with the exact prefix
+        "[uninstall_reason] " followed by their reason (verbatim quote preferred,
+        short paraphrase OK). Example:
+          notes: "[uninstall_reason] Too expensive after the recent price increase"
+        Ops will grep notes by this prefix to track churn drivers.
       `,
       inputSchema  : SAVE_CASE_STATE_INPUT_SHAPE,
       outputSchema : SAVE_CASE_STATE_OUTPUT_SHAPE,
