@@ -28,10 +28,10 @@ const TAG_CASE_INPUT_SHAPE = {
     .string()
     .regex(
       CRISP_SESSION_ID_REGEX,
-      "crisp_session_id must be the FULL session id of the CURRENT conversation (format: session_ + 36-char UUID). Do NOT truncate, do NOT append '...', do NOT reuse an example value from a prior turn.",
+      "crisp_session_id must be the FULL session id of the CURRENT conversation (format: session_ + 36-char UUID).",
     )
     .describe(
-      "The session ID of the Crisp conversation you are handling right now. Pass the EXACT, FULL value (session_ + lowercase UUID, 45 chars total). Never truncate; never reuse an ID from a previous conversation.",
+      "The current Crisp conversation session ID. Always pass the session_id from the active conversation.",
     ),
 } satisfies ZodRawShape;
 

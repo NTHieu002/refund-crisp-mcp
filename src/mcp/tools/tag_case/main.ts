@@ -27,7 +27,7 @@ function registerTagCaseTool(server: McpServer): void {
       description : `
         Use this tool to attach the "refund" segment to the current Crisp
         conversation so every refund case is filterable from the Crisp
-        dashboard.
+        dashboard. Always pass the session_id from the active conversation.
 
         MANDATORY — call this tool IMMEDIATELY, before any other action, the
         moment you detect the customer is talking about a refund-related
