@@ -5,6 +5,7 @@
 import { STORES_MOCK } from "@fixtures/stores.js";
 
 import { fetchPartnerData } from "@/shopify/partner.js";
+import { normalizeStoreUrl } from "@/utils/store_url.js";
 
 import type {
   CheckSubscriptionInput,
@@ -117,9 +118,27 @@ async function checkSubscriptionHandler(
     };
   }
 
+  // Normalize various URL shapes into the canonical <handle>.myshopify.com form
+  // (admin.shopify.com/store/<handle>, https://<handle>.myshopify.com/admin,
+  // bare handles like "hieu-first-store", etc.).
+  const normalized = input.store_url ? normalizeStoreUrl(input.store_url) : null;
+
+  if (input.store_url && !normalized) {
+    return {
+      found        : false,
+      subscription : null,
+      error        :
+        `Could not parse "${input.store_url}" as a Shopify store URL. ` +
+        `Ask the customer for their .myshopify.com URL — it is the URL ` +
+        `shown in Shopify Admin → top-left store name (looks like ` +
+        `"<store-name>.myshopify.com"). A custom domain such as mybrand.com ` +
+        `cannot be used here.`,
+    };
+  }
+
   // Partner API lookup requires store_url. Email-only falls back to fixtures.
-  if (input.store_url) {
-    const partner = await fetchPartnerData(input.store_url);
+  if (normalized) {
+    const partner = await fetchPartnerData(normalized);
 
     if (partner) {
       return {
@@ -133,7 +152,7 @@ async function checkSubscriptionHandler(
     // Try fixtures before giving up (lets dev work offline).
   }
 
-  const needle = (input.store_url ?? "").toLowerCase();
+  const needle = (normalized ?? "").toLowerCase();
 
   const match = STORES_MOCK.find((store) => {
     if (input.store_url && store.store_url.toLowerCase() === needle) return true;

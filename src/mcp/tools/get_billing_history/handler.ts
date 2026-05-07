@@ -5,6 +5,7 @@
 import { BILLING_CYCLES_MOCK } from "@fixtures/billing_cycles.js";
 
 import { fetchPartnerData } from "@/shopify/partner.js";
+import { normalizeStoreUrl } from "@/utils/store_url.js";
 
 import type {
   GetBillingHistoryInput,
@@ -62,7 +63,16 @@ function mapPartnerToCycles(
 async function getBillingHistoryHandler(
   input : GetBillingHistoryInput,
 ): Promise<GetBillingHistoryOutput> {
-  const partner = await fetchPartnerData(input.store_url);
+  const normalized = normalizeStoreUrl(input.store_url);
+
+  if (!normalized) {
+    return {
+      found  : false,
+      cycles : [],
+    };
+  }
+
+  const partner = await fetchPartnerData(normalized);
 
   if (partner) {
     return {
@@ -71,7 +81,7 @@ async function getBillingHistoryHandler(
     };
   }
 
-  const needle = input.store_url.toLowerCase();
+  const needle = normalized.toLowerCase();
 
   const matches = BILLING_CYCLES_MOCK
     .filter((cycle) => cycle.store_url.toLowerCase() === needle)

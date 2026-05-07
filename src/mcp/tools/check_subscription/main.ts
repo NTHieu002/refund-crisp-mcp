@@ -33,9 +33,19 @@ function registerCheckSubscriptionTool(server: McpServer): void {
         - Checking whether a subscription is active, cancelled, free or uninstalled
         - Locating the current 30-day billing cycle to feed prorated refund calculations
 
-        Provide either the Shopify "store_url" or the customer "email". This tool is
-        typically the first call in a refund flow before "get_billing_history" and
-        "calculate_refund".
+        Provide either the Shopify "store_url" or the customer "email". The store_url
+        accepts many shapes — full URLs (https://admin.shopify.com/store/<handle>,
+        https://<handle>.myshopify.com/admin), bare handles ("hieu-first-store"),
+        or the canonical "<handle>.myshopify.com" — the tool normalizes them all.
+
+        If the response is "found: false" with an "error" message, send the error
+        text to the customer to ask them to clarify their .myshopify.com URL —
+        do NOT transfer the conversation to a human operator on the first miss.
+        Only escalate after at least 2 failed lookups with different URL inputs,
+        or if the customer explicitly says they cannot find their store URL.
+
+        This tool is typically the first call in a refund flow before
+        "get_billing_history" and "calculate_refund".
       `,
       inputSchema  : CHECK_SUBSCRIPTION_INPUT_SHAPE,
       outputSchema : CHECK_SUBSCRIPTION_OUTPUT_SHAPE,
