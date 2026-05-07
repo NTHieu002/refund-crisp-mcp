@@ -5,7 +5,7 @@
 import { STORES_MOCK } from "@fixtures/stores.js";
 
 import { fetchPartnerData } from "@/shopify/partner.js";
-import { normalizeStoreUrl } from "@/utils/store_url.js";
+import { resolveStoreUrl } from "@/utils/store_resolver.js";
 
 import type {
   CheckSubscriptionInput,
@@ -118,21 +118,22 @@ async function checkSubscriptionHandler(
     };
   }
 
-  // Normalize various URL shapes into the canonical <handle>.myshopify.com form
-  // (admin.shopify.com/store/<handle>, https://<handle>.myshopify.com/admin,
-  // bare handles like "hieu-first-store", etc.).
-  const normalized = input.store_url ? normalizeStoreUrl(input.store_url) : null;
+  // Resolve various URL shapes into the canonical <handle>.myshopify.com form.
+  // Handles admin.shopify.com URLs, bare handles, and (best-effort) custom
+  // domains via a 3s storefront fetch + Shopify.shop regex.
+  const normalized = input.store_url ? await resolveStoreUrl(input.store_url) : null;
 
   if (input.store_url && !normalized) {
     return {
       found        : false,
       subscription : null,
       error        :
-        `Could not parse "${input.store_url}" as a Shopify store URL. ` +
-        `Ask the customer for their .myshopify.com URL — it is the URL ` +
-        `shown in Shopify Admin → top-left store name (looks like ` +
-        `"<store-name>.myshopify.com"). A custom domain such as mybrand.com ` +
-        `cannot be used here.`,
+        `Could not resolve "${input.store_url}" to a Shopify store. ` +
+        `If it's a custom domain, the storefront may be password-protected ` +
+        `or hide the Shopify shop tag. Ask the customer for their ` +
+        `.myshopify.com URL — visible in Shopify Admin → click the store ` +
+        `name top-left (looks like "<store-name>.myshopify.com"). ` +
+        `Visual guide: https://monosnap.ai/direct/S6onmmJVh0bgVTfmo0WGl2p7f4Y7gR`,
     };
   }
 

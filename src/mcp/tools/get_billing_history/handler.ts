@@ -5,7 +5,7 @@
 import { BILLING_CYCLES_MOCK } from "@fixtures/billing_cycles.js";
 
 import { fetchPartnerData } from "@/shopify/partner.js";
-import { normalizeStoreUrl } from "@/utils/store_url.js";
+import { resolveStoreUrl } from "@/utils/store_resolver.js";
 
 import type {
   GetBillingHistoryInput,
@@ -63,7 +63,7 @@ function mapPartnerToCycles(
 async function getBillingHistoryHandler(
   input : GetBillingHistoryInput,
 ): Promise<GetBillingHistoryOutput> {
-  const normalized = normalizeStoreUrl(input.store_url);
+  const normalized = await resolveStoreUrl(input.store_url);
 
   if (!normalized) {
     return {
