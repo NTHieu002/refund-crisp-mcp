@@ -416,24 +416,41 @@ fly deploy
 
 Your MCP is live at `https://my-mcp.fly.dev/mcp`. Scale-to-zero means near-zero idle cost.
 
-### Option C — VPS + Caddy (production, your infra)
+### Option C — VPS + nginx (production, your infra)
 
-1. Install Node, PM2, Caddy
+1. Install Node, PM2, nginx
 2. Clone repo, create `.env`, `pm2 start npm --name my-mcp -- run start`
-3. Caddy reverse-proxies the subdomain and manages HTTPS:
+3. nginx reverse-proxies the subdomain; HTTPS is handled either by Let's Encrypt via `certbot --nginx` or by an upstream edge.
 
-```caddy
-my-mcp.example.com {
-    reverse_proxy localhost:3000
+Plain HTTP (when an edge/load balancer already terminates HTTPS — common at companies):
+
+```nginx
+# /etc/nginx/sites-available/my-mcp.conf
+server {
+    listen 80;
+    server_name my-mcp.example.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        proxy_buffering   off;
+        proxy_read_timeout 1h;
+    }
 }
 ```
 
-If an edge/load balancer already terminates HTTPS (common at companies), serve plain HTTP on port 80 and let the edge forward:
+Enable + reload:
 
-```caddy
-:80 {
-    reverse_proxy localhost:3000
-}
+```sh
+ln -s /etc/nginx/sites-available/my-mcp.conf /etc/nginx/sites-enabled/my-mcp.conf
+nginx -t && systemctl reload nginx
 ```
 
 See `docs/add-another-mcp.md` for multi-MCP routing on the same VPS.

@@ -2,7 +2,9 @@
 
 Runbook for adding a new MCP server (e.g. `sales-mcp`, `onboard-mcp`) alongside `refund-mcp` on VPS `52.55.66.40` (`pf-support`).
 
-> **Current state (as of 2026-04-21):** the one-time infrastructure (Caddy + refund-mcp on port 3000) is already deployed. Jump straight to **Part 2** unless you're replacing the VPS. Part 1 is kept at the end of this doc for reference and disaster recovery.
+> **Current state (as of 2026-05-14):** the one-time infrastructure (nginx + refund-mcp on port 3000) is already deployed. Jump straight to **Part 2** unless you're replacing the VPS. Part 1 is kept at the end of this doc for reference and disaster recovery.
+>
+> Reverse proxy migrated from Caddy → nginx on 2026-05-14. If you read older revisions of this doc that mention Caddy, the routing model is identical (Host-header → localhost port), only the config format changed.
 
 ---
 
@@ -11,20 +13,20 @@ Runbook for adding a new MCP server (e.g. `sales-mcp`, `onboard-mcp`) alongside 
 ```
 IT edge (HTTPS termination, public internet)
     ├── refund-mcp.pagefly.io:443  ─┐
-    ├── sales-mcp.pagefly.io:443   ─┼──►  VPS :80 (Caddy)
+    ├── sales-mcp.pagefly.io:443   ─┼──►  VPS :80 (nginx)
     └── onboard-mcp.pagefly.io:443 ─┘           │
                                                 ├── Host: refund-mcp.pagefly.io  → localhost:3000
                                                 ├── Host: sales-mcp.pagefly.io   → localhost:3001
                                                 └── Host: onboard-mcp.pagefly.io → localhost:3002
 ```
 
-Caddy routes by `Host` header to the correct Node process. Each MCP has its own folder, `.env`, Turso DB and PM2 process — zero cross-talk.
+nginx routes by `server_name` (Host header) to the correct Node process. Each MCP has its own folder, `.env`, Turso DB, PM2 process, and nginx site config — zero cross-talk.
 
 ### Port allocation on `pf-support`
 
 | Port | Owner |
 |------|-------|
-| 80 | Caddy (reverse proxy, receives from IT edge) |
+| 80 | nginx (reverse proxy, receives from IT edge) |
 | 3000 | `refund-mcp` (active) |
 | 3001 | next MCP — claim when deploying |
 | 3002 | … |
@@ -56,6 +58,7 @@ Before running any commands, have these ready:
 - [ ] MCP repo pushed to Git with a working `scripts/setup.sh` (adapt from refund-crisp-mcp if missing)
 - [ ] `<PORT>` is free (`ss -tlnp | grep :30` to confirm nothing else is listening)
 - [ ] DNS resolves — run `getent hosts <SUBDOMAIN>` and expect `52.55.66.40`
+- [ ] nginx is already running (`systemctl status nginx`) — it terminates port 80 and routes via `server_name` to the right MCP
 
 ### Step 1 — Clone the repo
 
@@ -137,69 +140,56 @@ curl -s http://localhost:<PORT>/health && echo
 
 Must return `OK`.
 
-### Step 4 — Add Caddy route
+### Step 4 — Add nginx site
 
-Edit the Caddyfile:
+Each MCP gets its own file under `/etc/nginx/sites-available/`, symlinked into `sites-enabled/`. The catch-all (404 for unknown hosts) lives in `refund-mcp.conf` via `listen 80 default_server` and does not need to be touched.
 
 ```bash
-nano /etc/caddy/Caddyfile
+nano /etc/nginx/sites-available/<NAME>-mcp.conf
 ```
 
-The current file looks like this:
+Paste:
 
-```caddy
-{
-    auto_https off
-}
+```nginx
+server {
+    listen 80;
+    server_name <SUBDOMAIN>;
 
-:80 {
-    @refund host refund-mcp.pagefly.io
-    handle @refund {
-        reverse_proxy localhost:3000
-    }
+    location / {
+        proxy_pass http://127.0.0.1:<PORT>;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
 
-    handle {
-        respond "Unknown host" 404
-    }
-}
-```
-
-Add a new matcher + handle block **above** the catch-all `handle { respond ... }`. After editing, the file should look like:
-
-```caddy
-{
-    auto_https off
-}
-
-:80 {
-    @refund host refund-mcp.pagefly.io
-    handle @refund {
-        reverse_proxy localhost:3000
-    }
-
-    @<NAME> host <SUBDOMAIN>
-    handle @<NAME> {
-        reverse_proxy localhost:<PORT>
-    }
-
-    handle {
-        respond "Unknown host" 404
+        proxy_buffering   off;
+        proxy_read_timeout 1h;
+        proxy_send_timeout 1h;
     }
 }
 ```
 
 Save with `Ctrl+O` → Enter → `Ctrl+X`.
 
-Validate and reload:
+Enable the site:
 
 ```bash
-caddy validate --config /etc/caddy/Caddyfile
+ln -s /etc/nginx/sites-available/<NAME>-mcp.conf /etc/nginx/sites-enabled/<NAME>-mcp.conf
 ```
 
-Must print `Valid configuration`. If not, fix the syntax before reloading.
+Validate:
 
 ```bash
-systemctl reload caddy
+nginx -t
+```
+
+Must print `syntax is ok` + `test is successful`. If not, fix the syntax before reloading.
+
+```bash
+systemctl reload nginx
 ```
 
 ### Step 5 — Verify end-to-end
@@ -210,7 +200,11 @@ From the VPS:
 curl -s -H "Host: <SUBDOMAIN>" http://localhost/health && echo
 ```
 
-Must return `OK` (and the same for `refund-mcp.pagefly.io` — existing MCP must not be broken).
+```bash
+curl -s -H "Host: refund-mcp.pagefly.io" http://localhost/health && echo
+```
+
+Both must return `OK` — the second confirms the existing MCP wasn't broken by the new site.
 
 From your laptop with VPN **off**:
 
@@ -273,16 +267,18 @@ pm2 restart <NAME>-mcp
 
 ## Rolling back a broken MCP
 
-If the new MCP crashes or breaks the Caddyfile:
+If the new MCP crashes or breaks nginx:
 
 ```bash
 pm2 stop <NAME>-mcp && pm2 delete <NAME>-mcp && pm2 save
 ```
 
-Remove the `@<NAME>` + matching `handle` block from `/etc/caddy/Caddyfile`, then:
+Remove the nginx site (file + symlink), then reload:
 
 ```bash
-caddy validate --config /etc/caddy/Caddyfile && systemctl reload caddy
+rm /etc/nginx/sites-enabled/<NAME>-mcp.conf
+rm /etc/nginx/sites-available/<NAME>-mcp.conf
+nginx -t && systemctl reload nginx
 ```
 
 Delete the folder when you're ready to clean up:
@@ -291,7 +287,7 @@ Delete the folder when you're ready to clean up:
 rm -rf /opt/mcp/<NAME>
 ```
 
-`refund-mcp` keeps running the whole time.
+`refund-mcp` keeps running the whole time — its own site config and PM2 process are untouched.
 
 ---
 
@@ -299,30 +295,37 @@ rm -rf /opt/mcp/<NAME>
 
 ### `502 Bad Gateway` from the edge
 
-Caddy reached, but the upstream Node process is down.
+nginx reached, but the upstream Node process is down.
 
 ```bash
 pm2 status
 pm2 logs <NAME>-mcp --lines 50 --nostream
 ```
 
-Common causes: app crashed on boot (bad `.env`), port conflict, DB unreachable.
-
-### `Unknown host` response
-
-Request reached Caddy but `Host` header doesn't match any matcher. Usually the `@<NAME>` block is missing or the subdomain doesn't match.
+Also check nginx error log:
 
 ```bash
+tail -50 /var/log/nginx/error.log
+```
+
+Common causes: app crashed on boot (bad `.env`), port conflict, DB unreachable.
+
+### `Unknown host` response (404)
+
+Request reached nginx but `Host` header doesn't match any `server_name`. Usually the site config is missing or the symlink wasn't created.
+
+```bash
+ls -l /etc/nginx/sites-enabled/
 curl -sI -H "Host: <SUBDOMAIN>" http://localhost/
 ```
 
-### Caddy reload fails
+### nginx reload fails
 
 ```bash
-caddy validate --config /etc/caddy/Caddyfile
+nginx -t
 ```
 
-Points at the exact line with a syntax error. Fix and reload.
+Points at the exact file + line with a syntax error. Fix and re-run before `systemctl reload nginx`.
 
 ### DNS not resolving
 
@@ -344,13 +347,13 @@ Normal. VPN split-horizon DNS routes you internally while Crisp always hits the 
 ss -tlnp | grep :<PORT>
 ```
 
-Pick a different port. Update `.env` (`PORT=<NEW>`), `pm2 restart <NAME>-mcp`, and the Caddy `reverse_proxy` line.
+Pick a different port. Update `.env` (`PORT=<NEW>`), `pm2 restart <NAME>-mcp`, and the `proxy_pass` line in `/etc/nginx/sites-available/<NAME>-mcp.conf`. Then `nginx -t && systemctl reload nginx`.
 
 ---
 
 ## Resource notes
 
-`pf-support` has 7.7 GB RAM / 40 GB SSD. Each MCP uses ~150 MB RAM under load plus ~30 MB for Caddy. Comfortable for 5+ MCPs. If you see sustained memory pressure in `free -h`, ask IT to bump RAM.
+`pf-support` has 7.7 GB RAM / 40 GB SSD. Each MCP uses ~150 MB RAM under load plus ~20 MB for nginx (3 worker processes). Comfortable for 5+ MCPs. If you see sustained memory pressure in `free -h`, ask IT to bump RAM.
 
 Turso free tier covers 500 DBs and 25 M writes/month per account — well beyond anything we'll need here.
 
@@ -358,31 +361,79 @@ Turso free tier covers 500 DBs and 25 M writes/month per account — well beyond
 
 ## Part 1 reference — one-time infra (already done)
 
-> This section is historical — the commands ran on 2026-04-21 during the first multi-MCP migration. Only re-run them if the VPS is rebuilt from scratch.
+> This section is historical — only re-run if the VPS is rebuilt from scratch.
+> - **2026-04-21:** first multi-MCP migration, installed Caddy as reverse proxy.
+> - **2026-05-14:** swapped Caddy for nginx (sites-available pattern, per-MCP file). Current state.
 
-1. **Move refund-mcp to port 3000**
+1. **Move refund-mcp to port 3000** (only needed on a brand-new VPS where it's binding port 80 directly):
 
    ```bash
    sed -i 's/^PORT=.*/PORT=3000/' /opt/mcp/refund/.env
    pm2 restart refund-mcp
    ```
 
-2. **Install Caddy**
+2. **Install nginx**
 
    ```bash
-   apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
-   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' > /etc/apt/sources.list.d/caddy-stable.list
-   apt update && apt install -y caddy
+   apt update && apt install -y nginx
+   rm -f /etc/nginx/sites-enabled/default
    ```
 
-3. **Create the initial `/etc/caddy/Caddyfile`** with only the refund route (block at the top of Part 2 Step 4).
+3. **Create `/etc/nginx/sites-available/refund-mcp.conf`** with both the refund site and the catch-all 404 (one server block per concern):
 
-4. **Restart Caddy** and verify refund-mcp still responds externally:
+   ```nginx
+   server {
+       listen 80;
+       server_name refund-mcp.pagefly.io;
+
+       location / {
+           proxy_pass http://127.0.0.1:3000;
+           proxy_http_version 1.1;
+           proxy_set_header Host $host;
+           proxy_set_header X-Real-IP $remote_addr;
+           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+           proxy_set_header X-Forwarded-Proto $scheme;
+           proxy_set_header Upgrade $http_upgrade;
+           proxy_set_header Connection "upgrade";
+
+           proxy_buffering   off;
+           proxy_read_timeout 1h;
+           proxy_send_timeout 1h;
+       }
+   }
+
+   server {
+       listen 80 default_server;
+       server_name _;
+       return 404 "Unknown host\n";
+   }
+   ```
+
+4. **Enable + reload**
 
    ```bash
-   systemctl restart caddy
+   ln -s /etc/nginx/sites-available/refund-mcp.conf /etc/nginx/sites-enabled/refund-mcp.conf
+   nginx -t && systemctl enable --now nginx
    curl https://refund-mcp.pagefly.io/health
    ```
 
-Total time on the live VPS: ~5 minutes, no data loss, ~30 s downtime while Caddy replaced the direct Node-on-port-80 binding.
+### Migration from Caddy → nginx (2026-05-14)
+
+Performed live with ~3 s downtime:
+
+```bash
+# Install nginx alongside (Caddy still holds port 80)
+apt update && apt install -y nginx && systemctl stop nginx
+rm -f /etc/nginx/sites-enabled/default
+
+# Drop in /etc/nginx/sites-available/refund-mcp.conf (same content as Part 1 step 3)
+ln -s /etc/nginx/sites-available/refund-mcp.conf /etc/nginx/sites-enabled/refund-mcp.conf
+nginx -t
+
+# Cutover
+systemctl stop caddy && systemctl disable caddy
+systemctl start nginx && systemctl enable nginx
+
+# (later, after verification) Purge Caddy
+apt remove --purge -y caddy && rm -rf /etc/caddy /var/lib/caddy
+```

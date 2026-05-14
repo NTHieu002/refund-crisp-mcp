@@ -98,4 +98,4 @@ echo ""
 pm2 status
 echo ""
 echo "✓ Done. MCP is running on http://localhost:3000"
-echo "  Next: expose with Caddy on ports 80/443 once a domain is ready."
+echo "  Next: expose with nginx on ports 80/443 once a domain is ready."
