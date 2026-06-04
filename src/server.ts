@@ -47,7 +47,10 @@ app.post("/mcp", (req, res) => {
     mcpLogger("out", { statusCode: res.statusCode });
   });
 
-  mcpLogger("in", req.body);
+  // DIAG (temporary): log headers alongside the body to discover how Crisp
+  // delivers the conversation session_id (custom header vs _meta vs tool arg).
+  // Remove once the delivery mechanism is confirmed.
+  mcpLogger("in", { headers: req.headers, body: req.body });
 
   server
     .connect(transport)
