@@ -64,8 +64,10 @@ src/
 fixtures/
   stores.ts                       # Mock subscriptions — replace with real API in prod
   billing_cycles.ts               # Mock billing history — replace with real API in prod
-Dockerfile                        # Generated via @flydotio/dockerfile
-fly.toml                          # Region nrt, scale-to-zero, /health check
+scripts/
+  setup.sh                        # Provision/update on the VPS (Node+PM2+build+reload)
+Dockerfile                        # Legacy (earlier Fly setup) — prod is VPS+PM2, see docs/add-another-mcp.md
+fly.toml                          # Legacy (earlier Fly setup) — not the live deploy path
 ```
 
 ---
@@ -162,38 +164,38 @@ import('./dist/src/db/client.js').then(async ({getDbClient}) => {
 
 ---
 
-## Deploying to Fly.io
+## Deployment
 
-The repo ships with `fly.toml` (region `nrt` — same as the Turso DB, scale-to-zero, `/health` check) and a Docker image ready to go.
+**Production runs on a VPS** (`pf-support`, `52.55.66.40`), not Fly.io — as a PM2
+process named `refund-mcp` in `/var/www/mcp-refund`, on port `3000`, behind nginx
+(host-header routing for `refund-mcp.pagefly.io`). Turso holds the case state.
+The `fly.toml` / `Dockerfile` in the repo are leftovers from an earlier setup and
+are **not** the live deploy path.
 
-Install flyctl if needed:
+Full runbook (provisioning a new VPS, nginx, adding more MCPs): see
+[`docs/add-another-mcp.md`](docs/add-another-mcp.md).
 
-```powershell
-iwr https://fly.io/install.ps1 -useb | iex    # Windows
-```
+### Updating the live server
+
+SSH into the VPS via Teleport as `root`, then:
 
 ```sh
-fly auth login
-
-# First time only (app name is globally unique — update fly.toml if you change it)
-fly apps create refund-crisp-mcp
-
-# Inject Turso credentials as Fly secrets (never commit them)
-fly secrets set \
-  TURSO_DATABASE_URL="libsql://<your-db>.turso.io" \
-  TURSO_AUTH_TOKEN="<token>"
-
-fly deploy
+cd /var/www/mcp-refund
+git pull
+npm ci && npm run build && pm2 reload refund-mcp     # code-only: zero-downtime reload
 ```
 
-Your MCP endpoint becomes `https://refund-crisp-mcp.fly.dev/mcp`. Update the URL in Crisp.
+If you changed `.env`, use `pm2 restart refund-mcp` instead (so Node reloads env).
 
 Runtime checks:
 
 ```sh
-fly logs
-curl https://refund-crisp-mcp.fly.dev/health   # OK
+curl -s http://localhost:3000/health && echo        # OK
+pm2 logs refund-mcp --lines 30 --nostream
 ```
+
+The MCP endpoint is `https://refund-mcp.pagefly.io/mcp` — already registered in
+Crisp, so a redeploy needs no Crisp-side change.
 
 ---
 
@@ -204,7 +206,7 @@ curl https://refund-crisp-mcp.fly.dev/health   # OK
 - **PageFly internal API** — richest data (plan name, slots, earnings, cancel reason). Ask the backend team.
 - **Shopify Partner GraphQL API** — subscription + transactions. Limited to what's exposed to partners.
 
-Zod input/output shapes stay the same, so **no other tool needs changes** — the six logic and state tools keep working unchanged. Don't forget to add an API key to `.env` and Fly secrets.
+Zod input/output shapes stay the same, so **no other tool needs changes** — the six logic and state tools keep working unchanged. Don't forget to add the API key to the VPS `.env` (`/var/www/mcp-refund/.env`) and `pm2 restart refund-mcp`.
 
 ---
 
@@ -223,7 +225,6 @@ Zod input/output shapes stay the same, so **no other tool needs changes** — th
 
 ## Operational notes
 
-- **Cost**: Turso free tier covers 9 GB storage + 25 M writes/month — this server uses a fraction of it. Fly scale-to-zero keeps idle cost near $0.
-- **Cold start**: first MCP request after idle takes ~1–2 s (Fly machine wake + libSQL TLS handshake). All subsequent calls < 100 ms.
-- **State durability**: cases live in Turso, not on the Fly machine. Redeploying or scaling doesn't lose data.
+- **Cost**: Turso free tier covers 9 GB storage + 25 M writes/month — this server uses a fraction of it. The VPS (`pf-support`) hosts this and other MCPs; ~150 MB RAM per process.
+- **State durability**: cases live in Turso, not on the VPS disk. Redeploying (`pm2 reload`) or rebuilding doesn't lose data.
 - **Safety**: refunds of 3+ cycles, unauthorized auto-upgrades (TH5) and any case with a team-member commitment are auto-flagged for Manager (Boo) approval — Hugo won't send an amount without it.

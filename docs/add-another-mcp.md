@@ -42,7 +42,7 @@ Replace these placeholders throughout the commands below:
 
 | Placeholder | Example | Meaning |
 |-------------|---------|---------|
-| `<NAME>` | `sales` | short name (folder + PM2 process id) |
+| `<NAME>` | `sales` | short name. Folder is `/var/www/mcp-<NAME>`, PM2 process is `<NAME>-mcp` (note the order differs: `mcp-sales` folder, `sales-mcp` process — matching the existing `mcp-refund` / `refund-mcp`) |
 | `<PORT>` | `3001` | unused local port |
 | `<SUBDOMAIN>` | `sales-mcp.pagefly.io` | subdomain IT forwards to VPS:80 |
 | `<REPO_URL>` | `https://github.com/<org>/<repo>.git` | Git URL of the MCP code |
@@ -65,11 +65,11 @@ Before running any commands, have these ready:
 SSH into the VPS via Teleport as `root`, then:
 
 ```bash
-git clone <REPO_URL> /opt/mcp/<NAME>
+git clone <REPO_URL> /var/www/mcp-<NAME>
 ```
 
 ```bash
-cd /opt/mcp/<NAME>
+cd /var/www/mcp-<NAME>
 ```
 
 ### Step 2 — Create `.env`
@@ -77,7 +77,7 @@ cd /opt/mcp/<NAME>
 Use `nano` (installed globally) — safer than heredocs in the Teleport web terminal:
 
 ```bash
-nano /opt/mcp/<NAME>/.env
+nano /var/www/mcp-<NAME>/.env
 ```
 
 Paste content:
@@ -101,7 +101,7 @@ CRISP_KEY=<plugin-key>
 Lock the file permissions:
 
 ```bash
-chmod 600 /opt/mcp/<NAME>/.env
+chmod 600 /var/www/mcp-<NAME>/.env
 ```
 
 ### Step 3 — Build and start
@@ -109,7 +109,7 @@ chmod 600 /opt/mcp/<NAME>/.env
 If the repo has `scripts/setup.sh`:
 
 ```bash
-bash /opt/mcp/<NAME>/scripts/setup.sh
+bash /var/www/mcp-<NAME>/scripts/setup.sh
 ```
 
 The script installs Node/PM2 if missing, runs `npm ci && npm run build`, registers a PM2 process named `<NAME>-mcp`, and registers it as a systemd service.
@@ -117,7 +117,7 @@ The script installs Node/PM2 if missing, runs `npm ci && npm run build`, registe
 Fallback when there's no setup script:
 
 ```bash
-cd /opt/mcp/<NAME> && npm ci && npm run build
+cd /var/www/mcp-<NAME> && npm ci && npm run build
 ```
 
 ```bash
@@ -242,24 +242,33 @@ Commit the change so the next deploy sees the right starting port.
 
 ## Updating an MCP after it's deployed
 
-```bash
-cd /opt/mcp/<NAME>
-```
+SSH into the VPS via Teleport as `root`, `cd` into the MCP folder, pull, rebuild, reload. For **refund-mcp** specifically (folder `/var/www/mcp-refund`, process `refund-mcp`):
 
 ```bash
+cd /var/www/mcp-refund
 git pull
+npm ci && npm run build && pm2 reload refund-mcp
 ```
 
+Generic form for any MCP:
+
 ```bash
-bash scripts/setup.sh
+cd /var/www/mcp-<NAME>
+git pull
+npm ci && npm run build && pm2 reload <NAME>-mcp   # or: bash scripts/setup.sh
 ```
 
-(or `npm ci && npm run build && pm2 reload <NAME>-mcp` without the setup script).
-
-**Env vars changed**: after editing `.env`, use `pm2 restart` instead of `reload` so Node picks up the new values:
+`pm2 reload` is enough for code-only changes (zero-downtime). Verify after:
 
 ```bash
-nano /opt/mcp/<NAME>/.env
+curl -s http://localhost:3000/health && echo    # refund-mcp is on :3000
+pm2 logs refund-mcp --lines 30 --nostream
+```
+
+**Env vars changed**: after editing `.env`, use `pm2 restart` instead of `reload` so Node picks up the new values (`reload` keeps the old env):
+
+```bash
+nano /var/www/mcp-<NAME>/.env
 pm2 restart <NAME>-mcp
 ```
 
@@ -284,7 +293,7 @@ nginx -t && systemctl reload nginx
 Delete the folder when you're ready to clean up:
 
 ```bash
-rm -rf /opt/mcp/<NAME>
+rm -rf /var/www/mcp-<NAME>
 ```
 
 `refund-mcp` keeps running the whole time — its own site config and PM2 process are untouched.
@@ -368,7 +377,7 @@ Turso free tier covers 500 DBs and 25 M writes/month per account — well beyond
 1. **Move refund-mcp to port 3000** (only needed on a brand-new VPS where it's binding port 80 directly):
 
    ```bash
-   sed -i 's/^PORT=.*/PORT=3000/' /opt/mcp/refund/.env
+   sed -i 's/^PORT=.*/PORT=3000/' /var/www/mcp-refund/.env
    pm2 restart refund-mcp
    ```
 

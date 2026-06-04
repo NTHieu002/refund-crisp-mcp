@@ -3,10 +3,12 @@
 # One-shot setup for the PageFly Refund MCP Server on a fresh Debian/Ubuntu VPS.
 #
 # Usage:
-#   1. Clone the repo into /opt/mcp/refund
-#   2. Create /opt/mcp/refund/.env with TURSO_DATABASE_URL + TURSO_AUTH_TOKEN + PORT
+#   1. Clone the repo into /var/www/mcp-refund
+#   2. Create /var/www/mcp-refund/.env with TURSO_DATABASE_URL + TURSO_AUTH_TOKEN + PORT
 #   3. Run: bash scripts/setup.sh
 #
+# Path-agnostic: REPO_DIR is resolved from this script's own location, so it
+# works wherever the repo is checked out — the path above is just convention.
 # Idempotent — safe to re-run after `git pull`.
 
 set -euo pipefail

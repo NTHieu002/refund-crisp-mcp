@@ -416,7 +416,11 @@ fly deploy
 
 Your MCP is live at `https://my-mcp.fly.dev/mcp`. Scale-to-zero means near-zero idle cost.
 
-### Option C — VPS + nginx (production, your infra)
+### Option C — VPS + nginx (production, your infra) ← what refund-mcp uses
+
+> This is how **this** project is actually deployed: VPS `pf-support`, PM2
+> process `refund-mcp` in `/var/www/mcp-refund`, behind nginx. See
+> [`add-another-mcp.md`](add-another-mcp.md) for the full runbook.
 
 1. Install Node, PM2, nginx
 2. Clone repo, create `.env`, `pm2 start npm --name my-mcp -- run start`
