@@ -3,16 +3,14 @@
  ***************************************************************************/
 
 import { tagCaseHandler } from "@/mcp/tools/tag_case/handler.js";
+import { extractCrispContext } from "@/crisp/client.js";
 import {
   TAG_CASE_INPUT_SHAPE,
   TAG_CASE_OUTPUT_SHAPE,
 } from "@/mcp/tools/tag_case/shapes.js";
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type {
-  TagCaseInput,
-  TagCaseOutput,
-} from "@/mcp/tools/tag_case/shapes.js";
+import type { TagCaseOutput } from "@/mcp/tools/tag_case/shapes.js";
 
 /**************************************************************************
  * TOOL
@@ -27,7 +25,11 @@ function registerTagCaseTool(server: McpServer): void {
       description : `
         Use this tool to attach the "refund" segment to the current Crisp
         conversation so every refund case is filterable from the Crisp
-        dashboard. Always pass the session_id from the active conversation.
+        dashboard.
+
+        This tool takes NO arguments — call it with an empty object {}. The
+        conversation is identified automatically from the signed Crisp request
+        headers, so you never need to pass (or know) the session id.
 
         MANDATORY — call this tool IMMEDIATELY, before any other action, the
         moment you detect the customer is talking about a refund-related
@@ -46,15 +48,14 @@ function registerTagCaseTool(server: McpServer): void {
         A successful call returns "success: true" with the updated segments
         list. If it returns "success: false", retry once and surface the
         error to the support team — do NOT silently continue.
-
-        The tag is constant ("refund") — no arguments other than the Crisp
-        session ID are needed.
       `,
       inputSchema  : TAG_CASE_INPUT_SHAPE,
       outputSchema : TAG_CASE_OUTPUT_SHAPE,
     },
-    async (input: TagCaseInput) => {
-      const output: TagCaseOutput = await tagCaseHandler(input);
+    async (_input, extra) => {
+      const { sessionId, websiteId } = extractCrispContext(extra?.requestInfo?.headers);
+
+      const output: TagCaseOutput = await tagCaseHandler({ sessionId, websiteId });
 
       return {
         content : [

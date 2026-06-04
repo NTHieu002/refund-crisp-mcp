@@ -17,23 +17,11 @@ const REFUND_TAG = "refund";
  * INPUT
  ***************************************************************************/
 
-// Full Crisp session ID format: session_ + lowercase UUID (8-4-4-4-12 hex).
-// Regex enforcement rejects placeholder / truncated values like
-// "session_3d1ba9ea-..." that Hugo has been known to hallucinate.
-const CRISP_SESSION_ID_REGEX =
-  /^session_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-
-const TAG_CASE_INPUT_SHAPE = {
-  crisp_session_id : z
-    .string()
-    .regex(
-      CRISP_SESSION_ID_REGEX,
-      "crisp_session_id must be the FULL session id of the CURRENT conversation (format: session_ + 36-char UUID).",
-    )
-    .describe(
-      "The current Crisp conversation session ID. Always pass the session_id from the active conversation.",
-    ),
-} satisfies ZodRawShape;
+// The conversation session id is read from the signed "x-crisp-session-id"
+// request header (authoritative), NOT from a tool argument — the upstream
+// agent reliably hallucinates it. No input is required; the empty shape keeps
+// the tool callable with `{}` so Hugo never has to (and never can) get it wrong.
+const TAG_CASE_INPUT_SHAPE = {} satisfies ZodRawShape;
 
 /**************************************************************************
  * OUTPUT

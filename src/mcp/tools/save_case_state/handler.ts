@@ -12,6 +12,7 @@ import type {
   SaveCaseStateOutput,
 } from "@/mcp/tools/save_case_state/shapes.js";
 import type { CaseUpdates } from "@/db/cases.js";
+import type { CrispContext } from "@/crisp/client.js";
 
 /**************************************************************************
  * HELPERS
@@ -27,16 +28,18 @@ function toInt(value: boolean | undefined): number | undefined {
 
 // Fire-and-forget tag on Crisp. A missing tag is less bad than a failed save,
 // so we swallow errors and only log them to the console.
-async function tagConversationBestEffort(sessionId: string | undefined): Promise<void> {
+async function tagConversationBestEffort(context: CrispContext): Promise<void> {
+  const { sessionId, websiteId } = context;
+
   if (!sessionId) {
-    console.log("[save_case_state] auto-tag SKIP — no crisp_conversation_id in payload");
+    console.log("[save_case_state] auto-tag SKIP — no x-crisp-session-id header on the request");
     return;
   }
 
   console.log(`[save_case_state] auto-tag START session=${sessionId}`);
 
   try {
-    const segments = await addConversationTags(sessionId, [REFUND_TAG]);
+    const segments = await addConversationTags(sessionId, [REFUND_TAG], websiteId);
     console.log(`[save_case_state] auto-tag OK  session=${sessionId} segments=${JSON.stringify(segments)}`);
   } catch (error) {
     console.error(
@@ -51,14 +54,17 @@ async function tagConversationBestEffort(sessionId: string | undefined): Promise
  ***************************************************************************/
 
 async function saveCaseStateHandler(
-  input: SaveCaseStateInput,
+  input    : SaveCaseStateInput,
+  context  : CrispContext,
 ): Promise<SaveCaseStateOutput> {
   try {
     const updates: CaseUpdates = {
       // Identity
       customer_name         : input.customer_name,
       customer_email        : input.customer_email,
-      crisp_conversation_id : input.crisp_conversation_id,
+      // Prefer the authoritative session id from the Crisp request header;
+      // fall back to whatever the agent passed (often hallucinated).
+      crisp_conversation_id : context.sessionId ?? input.crisp_conversation_id,
       assigned_agent        : input.assigned_agent,
 
       // Classification
@@ -135,7 +141,7 @@ async function saveCaseStateHandler(
 
     // Side effects run after a successful DB write. Both are best-effort so
     // Hugo's save-path never fails on an external outage.
-    void tagConversationBestEffort(input.crisp_conversation_id);
+    void tagConversationBestEffort(context);
     void logRefundCase({ ...saved });
 
     return {

@@ -11,6 +11,44 @@ interface CrispMetaResponse {
   };
 }
 
+// Headers Crisp signs onto every MCP request. The session/website here are the
+// AUTHORITATIVE source — the upstream agent (Hugo) routinely hallucinates the
+// crisp_session_id tool argument, so we always prefer these over tool input.
+interface CrispContext {
+  sessionId : string | null;  // full "session_<uuid>" form, ready for the API
+  websiteId : string | null;  // website the conversation belongs to
+}
+
+type IncomingHeaders = Record<string, string | string[] | undefined> | undefined;
+
+/**************************************************************************
+ * CONTEXT
+ ***************************************************************************/
+
+function headerValue(headers: IncomingHeaders, name: string): string | null {
+  const raw = headers?.[name];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+
+  return value && value.trim().length > 0 ? value.trim() : null;
+}
+
+// Crisp sends the session id as a bare UUID in "x-crisp-session-id"; the REST
+// API expects the "session_" prefix, so re-attach it when missing.
+function normalizeSessionId(raw: string | null): string | null {
+  if (!raw) return null;
+
+  return raw.startsWith("session_") ? raw : `session_${raw}`;
+}
+
+// Pull the Crisp conversation context out of the request headers that the
+// MCP transport exposes via `extra.requestInfo.headers`.
+function extractCrispContext(headers: IncomingHeaders): CrispContext {
+  return {
+    sessionId : normalizeSessionId(headerValue(headers, "x-crisp-session-id")),
+    websiteId : headerValue(headers, "x-crisp-website-id"),
+  };
+}
+
 /**************************************************************************
  * HELPERS
  ***************************************************************************/
@@ -34,14 +72,17 @@ function crispAuthHeaders(): Record<string, string> {
   };
 }
 
-function crispBaseUrl(): string {
-  const websiteId = process.env.CRISP_WEBSITE_ID;
+// Prefer the website id from the request header (the conversation's real
+// website) and fall back to the configured CRISP_WEBSITE_ID for local/manual
+// calls that have no header context.
+function crispBaseUrl(websiteId?: string | null): string {
+  const id = websiteId ?? process.env.CRISP_WEBSITE_ID;
 
-  if (!websiteId) {
+  if (!id) {
     throw new Error("CRISP_WEBSITE_ID must be set to call the Crisp API.");
   }
 
-  return `https://api.crisp.chat/v1/website/${websiteId}`;
+  return `https://api.crisp.chat/v1/website/${id}`;
 }
 
 /**************************************************************************
@@ -49,8 +90,11 @@ function crispBaseUrl(): string {
  ***************************************************************************/
 
 // Fetch current segments (tags) on a Crisp conversation
-async function getConversationSegments(sessionId: string): Promise<string[]> {
-  const url = `${crispBaseUrl()}/conversation/${sessionId}/meta`;
+async function getConversationSegments(
+  sessionId : string,
+  websiteId? : string | null,
+): Promise<string[]> {
+  const url = `${crispBaseUrl(websiteId)}/conversation/${sessionId}/meta`;
 
   const res = await fetch(url, { headers: crispAuthHeaders() });
 
@@ -69,8 +113,9 @@ async function getConversationSegments(sessionId: string): Promise<string[]> {
 async function setConversationSegments(
   sessionId : string,
   segments  : string[],
+  websiteId? : string | null,
 ): Promise<void> {
-  const url = `${crispBaseUrl()}/conversation/${sessionId}/meta`;
+  const url = `${crispBaseUrl(websiteId)}/conversation/${sessionId}/meta`;
 
   const res = await fetch(url, {
     method  : "PATCH",
@@ -89,11 +134,12 @@ async function setConversationSegments(
 async function addConversationTags(
   sessionId : string,
   tags      : string[],
+  websiteId? : string | null,
 ): Promise<string[]> {
-  const existing = await getConversationSegments(sessionId);
+  const existing = await getConversationSegments(sessionId, websiteId);
   const merged   = Array.from(new Set([...existing, ...tags]));
 
-  await setConversationSegments(sessionId, merged);
+  await setConversationSegments(sessionId, merged, websiteId);
 
   return merged;
 }
@@ -103,3 +149,5 @@ async function addConversationTags(
  ***************************************************************************/
 
 export { getConversationSegments, setConversationSegments, addConversationTags };
+export { extractCrispContext };
+export type { CrispContext };

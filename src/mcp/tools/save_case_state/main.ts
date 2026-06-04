@@ -3,6 +3,7 @@
  ***************************************************************************/
 
 import { saveCaseStateHandler } from "@/mcp/tools/save_case_state/handler.js";
+import { extractCrispContext } from "@/crisp/client.js";
 import {
   SAVE_CASE_STATE_INPUT_SHAPE,
   SAVE_CASE_STATE_OUTPUT_SHAPE,
@@ -52,8 +53,10 @@ function registerSaveCaseStateTool(server: McpServer): void {
       inputSchema  : SAVE_CASE_STATE_INPUT_SHAPE,
       outputSchema : SAVE_CASE_STATE_OUTPUT_SHAPE,
     },
-    async (input: SaveCaseStateInput) => {
-      const output: SaveCaseStateOutput = await saveCaseStateHandler(input);
+    async (input: SaveCaseStateInput, extra) => {
+      const context = extractCrispContext(extra?.requestInfo?.headers);
+
+      const output: SaveCaseStateOutput = await saveCaseStateHandler(input, context);
 
       return {
         content : [

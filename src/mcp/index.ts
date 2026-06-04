@@ -54,7 +54,9 @@ function createMcpServer(): McpServer {
            active.
         2. Call "tag_case" on the FIRST turn you identify the conversation as
            a refund — before any clarifying question — and again on every turn
-           that calls "save_case_state". It is idempotent; skipping it leaves
+           that calls "save_case_state". Call it with an empty object {}: the
+           conversation is identified from the signed Crisp request headers, so
+           you never pass a session id. It is idempotent; skipping it leaves
            the case untagged in Crisp and breaks ops filtering. Trigger on any
            refund-adjacent intent (refund, cancel, unsubscribe, downgrade,
            double charge, auto-upgrade, "hoàn tiền", "hủy gói", etc.) —

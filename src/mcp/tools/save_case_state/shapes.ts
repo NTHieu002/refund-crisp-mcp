@@ -45,15 +45,15 @@ const SAVE_CASE_STATE_INPUT_SHAPE = {
   // Identity
   customer_name         : z.string().optional(),
   customer_email        : z.email().optional(),
+  // Resolved server-side from the signed Crisp request header, so it is NOT
+  // required here and is intentionally unvalidated — a hallucinated value must
+  // never reject the whole save. The header value always wins over this field.
   crisp_conversation_id : z
     .string()
-    .regex(
-      /^session_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-      "crisp_conversation_id must be the FULL session id of the CURRENT conversation (format: session_ + 36-char UUID).",
-    )
     .optional()
     .describe(
-      "The current Crisp conversation session ID. Always pass the session_id from the active conversation.",
+      "Deprecated / ignored: the server derives the Crisp session id from the " +
+      "request header. You do not need to pass this.",
     ),
   assigned_agent        : z.string().optional().describe("Agent name currently handling the case"),
 
