@@ -585,7 +585,7 @@ Full working example with 9 tools in 3 layers (lookup / logic / state), Turso st
 | DB schema | [`src/db/schema.ts`](../src/db/schema.ts) |
 | DB queries (upsert, list) | [`src/db/cases.ts`](../src/db/cases.ts) |
 | Deploy scripts | [`scripts/setup.sh`](../scripts/setup.sh) |
-| Fly config | [`fly.toml`](../fly.toml) |
+| Deploy runbook | [`docs/add-another-mcp.md`](add-another-mcp.md) |
 
 ---
 

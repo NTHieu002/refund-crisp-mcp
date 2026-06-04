@@ -66,8 +66,6 @@ fixtures/
   billing_cycles.ts               # Mock billing history — replace with real API in prod
 scripts/
   setup.sh                        # Provision/update on the VPS (Node+PM2+build+reload)
-Dockerfile                        # Legacy (earlier Fly setup) — prod is VPS+PM2, see docs/add-another-mcp.md
-fly.toml                          # Legacy (earlier Fly setup) — not the live deploy path
 ```
 
 ---
@@ -169,8 +167,6 @@ import('./dist/src/db/client.js').then(async ({getDbClient}) => {
 **Production runs on a VPS** (`pf-support`, `52.55.66.40`), not Fly.io — as a PM2
 process named `refund-mcp` in `/var/www/mcp-refund`, on port `3000`, behind nginx
 (host-header routing for `refund-mcp.pagefly.io`). Turso holds the case state.
-The `fly.toml` / `Dockerfile` in the repo are leftovers from an earlier setup and
-are **not** the live deploy path.
 
 Full runbook (provisioning a new VPS, nginx, adding more MCPs): see
 [`docs/add-another-mcp.md`](docs/add-another-mcp.md).

@@ -62,7 +62,7 @@ One denormalized SQLite/libSQL table, `cases`, **keyed by `store_url`** (the nat
 
 Env vars (`.env.example` is current): `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `PORT`; `CRISP_WEBSITE_ID`/`CRISP_IDENTIFIER`/`CRISP_KEY` (for tagging); `N8N_WEBHOOK_URL`/`N8N_API_KEY` (Partner lookup, fixtures fallback when unset); `N8N_LOG_WEBHOOK_URL` (ops sheet, skipped when unset).
 
-**Production is a VPS, not Fly.io** (the `fly.toml`/`Dockerfile` are legacy leftovers). It runs as PM2 process `refund-mcp` in `/var/www/mcp-refund` on port 3000, behind nginx (`refund-mcp.pagefly.io`). Deploy = SSH in, `cd /var/www/mcp-refund && git pull && npm ci && npm run build && pm2 reload refund-mcp` (use `pm2 restart` if `.env` changed). Creds live in the VPS `.env` (chmod 600), never committed. Full runbook: `docs/add-another-mcp.md`.
+**Production is a VPS, not Fly.io.** It runs as PM2 process `refund-mcp` in `/var/www/mcp-refund` on port 3000, behind nginx (`refund-mcp.pagefly.io`). Deploy = SSH in, `cd /var/www/mcp-refund && git pull && npm ci && npm run build && pm2 reload refund-mcp` (use `pm2 restart` if `.env` changed). Creds live in the VPS `.env` (chmod 600), never committed. Full runbook: `docs/add-another-mcp.md`.
 
 ## Style
 
