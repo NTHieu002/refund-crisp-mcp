@@ -3,7 +3,7 @@
  ***************************************************************************/
 
 import { upsertCase } from "@/db/cases.js";
-import { addConversationTags } from "@/crisp/client.js";
+import { addConversationTags, crispConversationUrl } from "@/crisp/client.js";
 import { logRefundCase } from "@/log/client.js";
 import { REFUND_TAG } from "@/mcp/tools/tag_case/shapes.js";
 
@@ -147,15 +147,11 @@ async function saveCaseStateHandler(
     // populate the "Ticket ID" column without knowing the URL format. Website
     // id comes from the request header, falling back to the configured env.
     const websiteId = context.websiteId ?? process.env.CRISP_WEBSITE_ID ?? null;
-    const crispConversationUrl =
-      websiteId && saved.crisp_conversation_id
-        ? `https://app.crisp.chat/website/${websiteId}/inbox/${saved.crisp_conversation_id}/`
-        : null;
 
     void logRefundCase({
       ...saved,
-      crisp_website_id      : websiteId,
-      crisp_conversation_url : crispConversationUrl,
+      crisp_website_id       : websiteId,
+      crisp_conversation_url : crispConversationUrl(websiteId, saved.crisp_conversation_id),
     });
 
     return {

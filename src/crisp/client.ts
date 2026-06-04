@@ -49,6 +49,17 @@ function extractCrispContext(headers: IncomingHeaders): CrispContext {
   };
 }
 
+// Operator-facing conversation link, e.g. used as the "Ticket ID" column in
+// the ops sheet. Returns null when either part is missing.
+function crispConversationUrl(
+  websiteId : string | null,
+  sessionId : string | null,
+): string | null {
+  return websiteId && sessionId
+    ? `https://app.crisp.chat/website/${websiteId}/inbox/${sessionId}/`
+    : null;
+}
+
 /**************************************************************************
  * HELPERS
  ***************************************************************************/
@@ -149,5 +160,5 @@ async function addConversationTags(
  ***************************************************************************/
 
 export { getConversationSegments, setConversationSegments, addConversationTags };
-export { extractCrispContext };
+export { extractCrispContext, crispConversationUrl };
 export type { CrispContext };
