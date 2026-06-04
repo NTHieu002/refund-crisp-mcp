@@ -13,10 +13,15 @@ async function logRefundCase(snapshot: Record<string, unknown>): Promise<void> {
   const url = process.env.N8N_LOG_WEBHOOK_URL;
   const key = process.env.N8N_API_KEY;
 
-  if (!url || !key) return;
+  if (!url || !key) {
+    console.log("[log-case] SKIP — N8N_LOG_WEBHOOK_URL / N8N_API_KEY not set");
+    return;
+  }
+
+  console.log(`[log-case] POST → ${url}`);
 
   try {
-    await fetch(url, {
+    const res = await fetch(url, {
       method  : "POST",
       headers : {
         "X-API-Key"    : key,
@@ -28,6 +33,14 @@ async function logRefundCase(snapshot: Record<string, unknown>): Promise<void> {
       }),
       signal  : AbortSignal.timeout(10_000),
     });
+
+    // fetch only throws on network-level errors, NOT on HTTP 4xx/5xx — so a
+    // missing/inactive n8n webhook (404) would otherwise pass silently.
+    if (res.ok) {
+      console.log(`[log-case] OK ${res.status}`);
+    } else {
+      console.error(`[log-case] webhook returned ${res.status}: ${await res.text()}`);
+    }
   } catch (error) {
     // Fire-and-forget: never fail the parent save on a log miss.
     console.error("[log-case] webhook failed:", error instanceof Error ? error.message : error);
