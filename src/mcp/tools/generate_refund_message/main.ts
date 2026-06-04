@@ -44,6 +44,13 @@ function registerGenerateRefundMessageTool(server: McpServer): void {
         returned "ready_to_process: true". Quoting a refund amount before the
         customer has shared refund_reason, store_url, billing_invoice and
         bank_confirmation is a policy violation.
+
+        MANDATORY FOLLOW-UP: immediately after you send this message (and again
+        once the customer accepts), you MUST call "save_case_state" with
+        store_url, the quoted refund_amount, deduction_percent, case_type and
+        the current stage (e.g. awaiting_customer_confirm, then refund_approved
+        / done). Do NOT end the conversation without saving — skipping it loses
+        the case from the database and the refund amount from the ops sheet.
       `,
       inputSchema  : GENERATE_REFUND_MESSAGE_INPUT_SHAPE,
       outputSchema : GENERATE_REFUND_MESSAGE_OUTPUT_SHAPE,

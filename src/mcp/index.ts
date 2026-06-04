@@ -61,6 +61,16 @@ function createMcpServer(): McpServer {
            refund-adjacent intent (refund, cancel, unsubscribe, downgrade,
            double charge, auto-upgrade, "hoàn tiền", "hủy gói", etc.) —
            over-tagging is safe, under-tagging is not.
+        3. You MUST call "save_case_state" the moment a refund is quoted or
+           progresses — concretely, right after "calculate_refund" /
+           "generate_refund_message", and again when the customer accepts —
+           BEFORE ending the conversation. Pass at least store_url,
+           refund_amount, deduction_percent, case_type and the current stage
+           (collecting_info → awaiting_customer_confirm → refund_approved →
+           done). This is not optional: skipping it loses the case from Turso
+           (no cross-day resume) and leaves the refund amount off the ops
+           sheet. If the customer goes quiet after you quote an amount, save
+           first (stage: awaiting_customer_confirm), then wait.
 
         Side effects: "save_case_state" also auto-tags the conversation and
         logs a row to the ops sheet on every successful save, so even if

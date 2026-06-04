@@ -46,6 +46,10 @@ function registerCalculateRefundTool(server: McpServer): void {
         returned "ready_to_process: true" in the current conversation. If it
         has not, go back and ask the customer for the missing items
         (refund_reason, store_url, billing_invoice, bank_confirmation).
+
+        FOLLOW-UP: once you have a refund_amount here, you MUST persist it with
+        "save_case_state" (store_url + refund_amount + deduction_percent +
+        case_type + stage) before the conversation ends — do not skip it.
       `,
       inputSchema  : CALCULATE_REFUND_INPUT_SHAPE,
       outputSchema : CALCULATE_REFUND_OUTPUT_SHAPE,
