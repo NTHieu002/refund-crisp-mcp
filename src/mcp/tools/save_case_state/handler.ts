@@ -142,7 +142,21 @@ async function saveCaseStateHandler(
     // Side effects run after a successful DB write. Both are best-effort so
     // Hugo's save-path never fails on an external outage.
     void tagConversationBestEffort(context);
-    void logRefundCase({ ...saved });
+
+    // Enrich the ops-sheet payload with the Crisp conversation link so n8n can
+    // populate the "Ticket ID" column without knowing the URL format. Website
+    // id comes from the request header, falling back to the configured env.
+    const websiteId = context.websiteId ?? process.env.CRISP_WEBSITE_ID ?? null;
+    const crispConversationUrl =
+      websiteId && saved.crisp_conversation_id
+        ? `https://app.crisp.chat/website/${websiteId}/inbox/${saved.crisp_conversation_id}/`
+        : null;
+
+    void logRefundCase({
+      ...saved,
+      crisp_website_id      : websiteId,
+      crisp_conversation_url : crispConversationUrl,
+    });
 
     return {
       success : true,
