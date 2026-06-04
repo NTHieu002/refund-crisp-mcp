@@ -32,7 +32,10 @@ If the customer disappears and comes back a day later, Hugo calls `get_case_stat
 - **`list_pending_cases`** — review cases by stage (e.g. `awaiting_manager`, `awaiting_customer_confirm`)
 
 ### Crisp side-effects — write back into the Crisp conversation
-- **`tag_case`** — attach the `refund` segment to the Crisp conversation so every refund case is filterable from the dashboard
+- **`tag_case`** — attach the `refund` segment to the Crisp conversation so every refund case is filterable from the dashboard. **Takes no arguments** — the conversation is identified from the signed `x-crisp-session-id` / `x-crisp-website-id` request headers, not from tool input. Also fires an early row into the ops sheet (see below).
+
+### Ops-sheet logging (side effect, not a tool)
+Both `tag_case` (early) and `save_case_state` (full detail) POST a snapshot to `N8N_LOG_WEBHOOK_URL`, an n8n flow that **Append-or-Updates** a [refund tracking Google Sheet](https://docs.google.com/spreadsheets/d/127IllfOUCddKRVU73XoDy7I1kPHc4copi6yKem1yEkA/edit) keyed on the conversation URL (`Ticket ID`). Best-effort; skipped when the env var is unset. See [`docs/refund-flow.md`](docs/refund-flow.md).
 
 ---
 
@@ -80,9 +83,17 @@ TURSO_AUTH_TOKEN=<token>
 PORT=3000
 
 # Crisp plugin — required by tag_case (and any future write-back tools)
-CRISP_WEBSITE_ID=<website-uuid>
+CRISP_WEBSITE_ID=<website-uuid>           # fallback only; per-request value comes from the x-crisp-website-id header
 CRISP_IDENTIFIER=<plugin-identifier>
 CRISP_KEY=<plugin-key>
+
+# n8n — Shopify Partner API proxy for check_subscription / get_billing_history.
+# Unset → those tools fall back to fixtures/*.ts (offline dev).
+N8N_WEBHOOK_URL=https://workflow.bravebits.co/webhook/partner-store
+N8N_API_KEY=<key>
+
+# n8n — ops-sheet logger fired by tag_case + save_case_state. Unset → logging skipped.
+N8N_LOG_WEBHOOK_URL=https://workflow.bravebits.co/webhook/refund-log
 ```
 
 **No Turso account yet?** Sign up at [turso.tech](https://turso.tech), `turso db create refund-case`, `turso db tokens create refund-case --expiration none`.
@@ -140,13 +151,14 @@ Cloudflared prints a temporary `https://<random>.trycloudflare.com` URL — this
 
 Expected chain:
 1. `get_case_state` — no case yet
-2. `check_subscription` → 5-slot $24, active, 10 days into cycle
-3. `get_billing_history` → 3 paid cycles
-4. `collect_refund_info` — asks for reason + invoice + bank
-5. After customer replies → `classify_refund_case` → **TH1**, deduction 20 %
-6. `calculate_refund(24, days_used=10, days_unused=20, 20%)` → **$12.80**
-7. `generate_refund_message` → drafts the breakdown
-8. `save_case_state(stage: "awaiting_customer_confirm", refund_amount: 12.80, crisp_conversation_id: "session_...")`
+2. `tag_case()` — no args; reads the session from the request header, tags `refund`, logs the early ops-sheet row
+3. `check_subscription` → 5-slot $24, active, 10 days into cycle
+4. `get_billing_history` → 3 paid cycles
+5. `collect_refund_info` — asks for reason + invoice + bank
+6. After customer replies → `classify_refund_case` → **TH1**, deduction 20 %
+7. `calculate_refund(24, days_used=10, days_unused=20, 20%)` → **$12.80**
+8. `generate_refund_message` → drafts the breakdown
+9. `save_case_state(stage: "awaiting_customer_confirm", refund_amount: 12.80)` — mandatory once an amount is quoted (hard gate); `crisp_conversation_id` is derived from the request header, not passed
 
 Verify the row was saved:
 

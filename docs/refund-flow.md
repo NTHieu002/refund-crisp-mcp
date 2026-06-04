@@ -35,11 +35,11 @@ End-to-end map of how a refund request travels from a Crisp customer through Hug
 │  ├── list_pending_cases      │                      │
 │  └── tag_case                │   ┌──────────────────▼──────────────┐
 │                              │   │      Crisp REST API v1          │
-│  Side effects from           │◄──┤  /website/.../conversation/.../ │
-│  save_case_state:            │   │  meta (segments)                │
-│  ├── Turso upsert            │   └─────────────────────────────────┘
-│  ├── PATCH segment refund    │
-│  └── POST log webhook        │
+│  Side effects:               │◄──┤  /website/.../conversation/.../ │
+│  ├─ tag_case: PATCH segment, │   │  meta (segments)                │
+│  │  POST log (early row)     │   └─────────────────────────────────┘
+│  └─ save_case_state: Turso   │
+│     upsert, PATCH, POST log  │
 └──┬───────────┬────────┬──────┘
    │           │        │
    ▼           ▼        ▼
@@ -230,6 +230,28 @@ The same gate guards `generate_refund_message`, so Hugo cannot side-step `calcul
 
 ---
 
+## Conversation identity — read from signed Crisp headers
+
+Crisp signs every MCP request with headers that identify the live conversation:
+
+| Header | Value | Used for |
+|---|---|---|
+| `x-crisp-session-id` | bare UUID (no `session_` prefix) | the conversation to tag / log |
+| `x-crisp-website-id` | website UUID | which Crisp website to call |
+| `x-crisp-timestamp` / `x-crisp-signature` | HMAC | request authenticity (not yet verified) |
+
+`tag_case` and the `save_case_state` auto-tag read the session/website from
+`extra.requestInfo.headers` (`extractCrispContext` in `src/crisp/client.ts`),
+re-attach the `session_` prefix the REST API expects, and prefer the header
+website id over `CRISP_WEBSITE_ID`. **The tool arguments are ignored for
+identity** — `tag_case` takes no arguments at all, and `save_case_state`'s
+`crisp_conversation_id` is an optional, unvalidated fallback.
+
+> Historical note: identity used to come from a `crisp_session_id` tool
+> argument that Hugo routinely hallucinated (`session_1111…`), so every Crisp
+> meta call 404'd and nothing was ever tagged. Reading the signed header fixed
+> it (see git history, June 2026).
+
 ## Tag flow — two-layer redundancy
 
 ```
@@ -239,22 +261,49 @@ The same gate guards `generate_refund_message`, so Hugo cannot side-step `calcul
             │                     │
             ▼                     ▼
    Crisp Hugo MCP            Crisp webhook
+   (tag_case, {})            (keyword flow)
             │                     │
-            ▼                     ▼
-   tag_case (Hugo)         n8n webhook flow
-   (sometimes              ├── IF keyword "refund"
-    hallucinates           ├── GET conversation segs
-    session_id)            ├── merge "refund"
-            │              ├── PATCH segs
-            │              └── ✓ done
-            ▼
-   Crisp PATCH segments
-   (only works if Hugo
-    passes correct
-    session_id)
+   reads x-crisp-           ├── IF keyword "refund"
+   session-id header        ├── GET conversation segs
+            │               ├── merge "refund"
+            ▼               ├── PATCH segs
+   Crisp PATCH segments     └── ✓ done
+   (always correct now)
 ```
 
-Hugo's MCP-driven tagging via `tag_case` and the auto-tag side effect on `save_case_state` both rely on the agent passing the live `session_id`, which Hugo has historically failed to provide reliably. The n8n keyword webhook is the authoritative path for the dashboard filter — it pulls the session id directly from the Crisp event payload, so it always tags correctly when the customer (or Hugo) mentions a refund-adjacent term.
+`tag_case` is now reliable on its own (header-derived session), and the n8n
+keyword webhook remains as a redundant safety net that pulls the session id
+straight from the Crisp event payload.
+
+## Ops-sheet logging — two phases into one row
+
+Both `tag_case` and `save_case_state` POST a snapshot to `N8N_LOG_WEBHOOK_URL`
+(`refund-log`), which appends/updates the [refund tracking sheet](https://docs.google.com/spreadsheets/d/127IllfOUCddKRVU73XoDy7I1kPHc4copi6yKem1yEkA/edit):
+
+1. **`tag_case`** fires early (turn 1, on refund detection) with a minimal
+   payload — `crisp_conversation_url`, `stage: "refund_detected"`,
+   `assigned_agent: "AI"` — creating the skeleton row.
+2. **`save_case_state`** fires later with the full case (refund_amount,
+   option_chosen, resolution, notes, …), enriching the same row.
+
+Both carry the same `crisp_conversation_url`, so the n8n Google Sheets node must
+use **Append or Update Row matched on `Ticket ID`** — otherwise the second POST
+creates a duplicate instead of updating. `logRefundCase` is best-effort and now
+logs `[log-case] SKIP|POST|OK <status>|<error>` so the path is observable;
+`fetch` does not throw on 4xx/5xx, so a missing/inactive webhook surfaces as a
+logged non-2xx, not a silent miss.
+
+Sheet column → payload field:
+
+| Column | Field |
+|---|---|
+| Ticket ID | `crisp_conversation_url` |
+| Created At | `created_at` / `logged_at` |
+| Refund status | `resolution` / `stage` |
+| Refund Amount ($) | `refund_amount` |
+| Refund Type | `option_chosen` |
+| Handled By | `assigned_agent` |
+| Notes | `notes` |
 
 ---
 
@@ -264,6 +313,8 @@ Hugo's MCP-driven tagging via `tag_case` and the auto-tag side effect on `save_c
 |---|---|
 | Hugo skipped invoice / bank step | `pm2 logs refund-mcp | grep -E "calculate_refund|generate_refund_message"` — look for BLOCKED responses or missing flag inputs |
 | Refund quoted while store still on paid plan | Same logs — check whether `verified_downgrade_complete: false` was passed |
-| Tag not added to conversation | `pm2 logs refund-mcp | grep -E "tag_case|auto-tag"` for hallucinated session ids; check the n8n keyword flow execution log as the safety net |
+| Tag not added to conversation | `pm2 logs refund-mcp | grep -E "tag_case"` — `START`/`OK` shows the header-derived session; a `FAIL … no x-crisp-session-id header` means the request didn't come through Crisp. n8n keyword flow is the safety net |
+| Refund amount missing from the sheet | `grep "\[log-case\]"` — `SKIP` = `N8N_LOG_WEBHOOK_URL` unset; `404` = n8n webhook not Active; no `save_case_state` at all = Hugo skipped the save (see next row) |
+| Hugo never calls `save_case_state` | Confirm with `grep save_case_state`. Hard gate #3 in the server instructions mandates it after `calculate_refund`/`generate_refund_message`; re-run **Refresh tools** in Crisp so the updated instructions load |
 | Custom domain not resolved | `pm2 logs refund-mcp | grep "store-resolver"` — WAF/Cloudflare typically returns 503; fallback message is expected |
-| Case state lost between sessions | Inspect Turso row by `store_url`; verify `crisp_conversation_id` was passed on the last `save_case_state` |
+| Case state lost between sessions | Inspect Turso row by `store_url`; `crisp_conversation_id` is now set from the request header automatically |

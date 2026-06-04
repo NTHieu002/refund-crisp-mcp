@@ -34,7 +34,7 @@ Node 24.x is required (`engines`). Build always needs the `tsc-alias` step — r
 
 Add a tool by creating this triad and registering it in `src/mcp/tools/index.ts`. Tools group into four tiers there: lookup (fixtures/Partner API), pure-logic, state (Turso), Crisp side-effects.
 
-**Tool descriptions are prompt engineering, not docs.** The long `description` strings (and Zod `.describe()` text, e.g. the `crisp_session_id` regex message in `tag_case/shapes.ts`) exist to correct specific Hugo failure modes — hallucinated session IDs, escalating on first lookup miss, skipping the info-collection gate. Treat their wording as deliberate; don't trim them as "verbose."
+**Tool descriptions are prompt engineering, not docs.** The long `description` strings (and Zod `.describe()` text) exist to correct specific Hugo failure modes — escalating on first lookup miss, skipping the info-collection gate, ending a refund without saving state. Treat their wording as deliberate; don't trim them as "verbose."
 
 **Defense in depth — handlers re-enforce the gates the prompt asks for.** `calculate_refund/handler.ts` returns a `BLOCKED` result if `has_billing_invoice` / `has_bank_confirmation` / `verified_downgrade_complete` aren't set, because tool descriptions alone are routinely ignored. Keep critical preconditions enforced in the handler, not just described.
 
@@ -50,7 +50,11 @@ One denormalized SQLite/libSQL table, `cases`, **keyed by `store_url`** (the nat
 
 `src/db/cases.ts` is the only DB access layer: `upsertCase` does a partial merge (`ON CONFLICT … DO UPDATE SET … = excluded.…`, skipping `undefined` fields), so `save_case_state` can persist any subset of the ~60 columns. The `CaseColumn` union there is the source of truth for column names — keep it, the `CREATE TABLE`, and `save_case_state/shapes.ts` in sync when adding fields. Booleans are stored as `INTEGER` 0/1 (`toInt` in the save handler).
 
-**`save_case_state` has two fire-and-forget side effects** after a successful write: it auto-tags the Crisp conversation with the `refund` segment (`src/crisp/client.ts`) and POSTs a snapshot to the ops-log webhook (`src/log/client.ts`, `N8N_LOG_WEBHOOK_URL`). Both swallow their own errors — a Crisp/log outage must never fail the DB save. This is the safety net behind the turn-1 tagging gate.
+**Conversation identity comes from signed Crisp request headers, not tool arguments.** Crisp sends `x-crisp-session-id` (bare UUID) and `x-crisp-website-id` on every MCP call; `extractCrispContext` in `src/crisp/client.ts` reads them from `extra.requestInfo.headers`, re-attaches the `session_` prefix the REST API needs, and prefers the header website id over `CRISP_WEBSITE_ID`. `tag_case` therefore takes **no arguments**; `save_case_state`'s `crisp_conversation_id` is an optional fallback. (Hugo hallucinated the old `crisp_session_id` argument, which 404'd every Crisp call — June 2026 fix.)
+
+**Two fire-and-forget side effects feed Crisp + the ops sheet.** Both `tag_case` and `save_case_state` (a) PATCH the `refund` segment onto the conversation and (b) POST a snapshot to the ops-log webhook (`src/log/client.ts`, `N8N_LOG_WEBHOOK_URL`). The log is **two-phase into one sheet row**: `tag_case` writes a skeleton row early (`stage: "refund_detected"`), `save_case_state` enriches it with the amount/resolution later — the n8n Google Sheets node must Append-or-Update keyed on the conversation URL (`Ticket ID`) or it duplicates. All side effects swallow their own errors so an outage never fails the DB save.
+
+**Hugo under-calls `save_case_state`.** Left to its own, it completes a refund quote and ends the conversation without persisting — losing both Turso state (no cross-day resume) and the sheet amount. Hard gate #3 in the `mcp/index.ts` instructions (plus follow-up notes in `calculate_refund`/`generate_refund_message`) mandates the save; instructions are advisory, so verify with `grep save_case_state` after any related change, and re-run Crisp's "Refresh tools" so updated instructions load.
 
 ## Playbook rules (encoded in handlers)
 
