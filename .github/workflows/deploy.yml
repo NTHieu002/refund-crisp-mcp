@@ -1,0 +1,20 @@
+name: deploy
+on:
+  push:
+    branches: [main]
+concurrency:                 # tránh 2 lần deploy chồng nhau
+  group: deploy-refund-mcp
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: [self-hosted, pf-support]
+    steps:
+      - name: Pull & reload
+        run: |
+          set -e
+          cd /var/www/mcp-refund
+          git fetch --all
+          git reset --hard origin/main      # tránh kẹt khi local lệch
+          npm ci
+          npm run build
+          pm2 reload refund-mcp --update-env
