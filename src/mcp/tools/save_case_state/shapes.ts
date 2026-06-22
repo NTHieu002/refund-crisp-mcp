@@ -11,17 +11,24 @@ import { CASE_RECORD_SHAPE } from "@/mcp/tools/_shared/case_shape.js";
  * CONSTANTS
  ***************************************************************************/
 
+// Canonical case-progress stages, ordered roughly by lifecycle. Used to build
+// the `stage` field's guidance. NOTE: `stage` is stored as free text (see below)
+// so an unexpected value never rejects a save — these are the preferred labels.
 const STAGE_VALUES = [
-  "collecting_info",
-  "winback_offered",
-  "awaiting_customer_confirm",
-  "awaiting_manager",
-  "awaiting_bill_paid",
-  "awaiting_option_choice",
-  "refund_issued",
-  "completed",
-  "rejected",
-  "abandoned",
+  "collecting_info",          // gathering store_url / invoice / reason / bank
+  "winback_offered",          // win-back pitched, awaiting decision
+  "offer_sent",               // an offer (win-back / discount / option) was sent
+  "bill_sent",                // refund breakdown / bill sent to the customer
+  "awaiting_customer_confirm", // amount quoted, waiting for the customer to confirm
+  "awaiting_option_choice",   // TH4 Option A/B (or App Credit) presented
+  "awaiting_bill_paid",       // TH4 Option B / failed bill — waiting for Paid
+  "awaiting_manager",         // escalated to Manager (Boo), awaiting approval
+  "forwarded_to_human",       // handed off to a human agent
+  "refund_approved",          // customer (and Manager, if needed) approved
+  "refund_issued",            // refund processed in Shopify
+  "completed",                // case closed (refunded / declined / app credit)
+  "rejected",                 // Manager rejected
+  "abandoned",                // customer disappeared
 ] as const;
 
 const MANAGER_STATUS_VALUES = [
@@ -59,7 +66,18 @@ const SAVE_CASE_STATE_INPUT_SHAPE = {
 
   // Classification
   case_type         : z.enum(CASE_TYPE_VALUES).optional(),
-  stage             : z.enum(STAGE_VALUES).optional(),
+  // Stored as free text — NOT a strict enum — so a hallucinated/unexpected stage
+  // can never reject the whole save (same defensive choice as crisp_conversation_id).
+  // SAVE AFTER EVERY STEP, passing the stage that matches what just happened.
+  stage             : z
+    .string()
+    .optional()
+    .describe(
+      "Case progress stage — call save_case_state after EVERY handling step and pass " +
+      "the matching stage. Prefer one of: " + STAGE_VALUES.join(" | ") + ". " +
+      "Any other string is still accepted (it will never fail the save), but the " +
+      "canonical values keep ops-sheet / list_pending_cases filtering consistent.",
+    ),
   resolution        : z
     .enum([
       "refunded_full",

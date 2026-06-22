@@ -53,6 +53,13 @@ function registerClassifyRefundCaseTool(server: McpServer): void {
         during the conversation. Call this tool once enough context is known, usually
         after "check_subscription", "get_billing_history" and (for "did not use it"
         claims) "check_usage_data".
+
+        FOLLOW-UP: persist the outcome with "save_case_state" right away — case_type,
+        deduction_percent, needs_manager, manager_reason. If needs_manager is true,
+        or you forward the chat to a human agent, SAVE BEFORE handing off (stage:
+        awaiting_manager or forwarded_to_human, needs_manager: true,
+        manager_status: pending, manager_brief: <why>) so whoever picks it up has the
+        full context.
       `,
       inputSchema  : CLASSIFY_REFUND_CASE_INPUT_SHAPE,
       outputSchema : CLASSIFY_REFUND_CASE_OUTPUT_SHAPE,

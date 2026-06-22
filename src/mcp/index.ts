@@ -64,16 +64,23 @@ function createMcpServer(): McpServer {
            refund-adjacent intent (refund, cancel, unsubscribe, downgrade,
            double charge, auto-upgrade, "hoàn tiền", "hủy gói", etc.) —
            over-tagging is safe, under-tagging is not.
-        3. You MUST call "save_case_state" the moment a refund is quoted or
-           progresses — concretely, right after "calculate_refund" /
-           "generate_refund_message", and again when the customer accepts —
-           BEFORE ending the conversation. Pass at least store_url,
-           refund_amount, deduction_percent, case_type and the current stage
-           (collecting_info → awaiting_customer_confirm → refund_approved →
-           done). This is not optional: skipping it loses the case from Turso
-           (no cross-day resume) and leaves the refund amount off the ops
-           sheet. If the customer goes quiet after you quote an amount, save
-           first (stage: awaiting_customer_confirm), then wait.
+        3. SAVE AFTER EVERY STEP. Call "save_case_state" after every action that
+           changes the case — not only when a refund is quoted. Pass store_url
+           plus whatever changed, and the stage that matches what just happened:
+             - asked for / received info ......... stage: collecting_info
+             - sent the win-back / any offer ..... stage: offer_sent (winback_offered: true)
+             - sent the refund bill / breakdown .. stage: bill_sent (breakdown_sent: true)
+             - quoted an amount, now waiting ..... stage: awaiting_customer_confirm
+             - sent TH4 A/B or App-Credit option . stage: awaiting_option_choice
+             - escalated to Manager (Boo) ........ stage: awaiting_manager (needs_manager: true, manager_status: pending)
+             - forwarded the chat to a human ..... stage: forwarded_to_human (assigned_agent: <name>)
+             - customer accepted ................. stage: refund_approved
+             - refund processed in Shopify ....... stage: refund_issued (then completed)
+             - declined (TH8) .................... stage: completed (resolution: declined)
+           This is not optional: every save also re-tags Crisp and updates the
+           ops sheet, so a missed step loses BOTH the resumable Turso state and
+           the sheet row. If the customer goes quiet, SAVE FIRST with the current
+           stage, then wait. When in doubt, save.
 
         Side effects: "save_case_state" also auto-tags the conversation and
         logs a row to the ops sheet on every successful save, so even if

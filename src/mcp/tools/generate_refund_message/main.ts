@@ -55,12 +55,16 @@ function registerGenerateRefundMessageTool(server: McpServer): void {
         bank_confirmation is a policy violation. (Declines and failed-bill App-Credit
         offers are exempt — there is no refund amount to quote.)
 
-        MANDATORY FOLLOW-UP: immediately after you send this message (and again
-        once the customer accepts), you MUST call "save_case_state" with
-        store_url, the quoted refund_amount, deduction_percent, case_type and
-        the current stage (e.g. awaiting_customer_confirm, then refund_approved
-        / done). Do NOT end the conversation without saving — skipping it loses
-        the case from the database and the refund amount from the ops sheet.
+        MANDATORY FOLLOW-UP: immediately after you send ANY message produced here,
+        call "save_case_state" with store_url and the stage that matches what you
+        sent — win-back → offer_sent; refund breakdown → bill_sent (then
+        awaiting_customer_confirm); TH4 / App-Credit options → awaiting_option_choice;
+        decline (TH8) → completed (resolution: declined). Include refund_amount,
+        deduction_percent and case_type whenever a number was quoted. Save AGAIN
+        when the customer accepts (refund_approved) and when it is processed
+        (refund_issued → completed). Do NOT end the conversation without saving —
+        skipping it loses the case from the database and the refund amount from the
+        ops sheet.
       `,
       inputSchema  : GENERATE_REFUND_MESSAGE_INPUT_SHAPE,
       outputSchema : GENERATE_REFUND_MESSAGE_OUTPUT_SHAPE,

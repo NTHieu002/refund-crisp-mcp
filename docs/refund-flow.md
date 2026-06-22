@@ -182,14 +182,18 @@ Customer        Hugo               MCP                         Turso/Partner
        │ completed│
        └──────────┘
 
-  Other terminal states:
-   ├── awaiting_bill_paid       (TH4 — Upcoming bill)
-   ├── awaiting_option_choice   (TH4 — Option A/B)
+  Other states:
+   ├── offer_sent / bill_sent   (checkpoint after sending an offer / breakdown)
+   ├── awaiting_bill_paid       (TH4 — Upcoming / failed bill)
+   ├── awaiting_option_choice   (TH4 — Option A/B / App Credit)
+   ├── forwarded_to_human       (handed off to a human agent)
    ├── rejected                 (manager rejected)
    └── abandoned                (customer disappeared)
 ```
 
 Stage values are persisted in the `cases.stage` column. They drive the resume logic when a customer returns mid-flow — Hugo loads `get_case_state` and continues from whatever stage was last recorded.
+
+**Save after every step.** `save_case_state` is meant to be called after *every* handling action (info collected, offer sent, breakdown sent, escalation, human handoff, accept, process), each with the matching `stage` — not just once at the end. To keep a hallucinated stage from ever rejecting the whole save, `stage` is stored as free text (an enum would 400 the call on an unexpected value, silently losing the checkpoint — the same reason `crisp_conversation_id` is unvalidated).
 
 ---
 

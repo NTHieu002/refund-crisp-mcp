@@ -43,6 +43,11 @@ function registerCollectRefundInfoTool(server: McpServer): void {
         refund_reason → store_url → billing_invoice → bank_confirmation. Send any
         URLs inside "next_question" to the customer exactly as provided (they are
         visual guides the customer will see as inline images).
+
+        CHECKPOINT: after each exchange that collects a new piece of info, call
+        "save_case_state" (stage: collecting_info) with the flags gathered so far
+        (has_store_url, has_billing_invoice, has_refund_reason, ...). That way a
+        customer who returns later resumes without repeating themselves.
       `,
       inputSchema  : COLLECT_REFUND_INFO_INPUT_SHAPE,
       outputSchema : COLLECT_REFUND_INFO_OUTPUT_SHAPE,

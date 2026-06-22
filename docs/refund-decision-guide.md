@@ -220,21 +220,37 @@ needs_manager_approve  = (case === TH5) HOẶC cycles >= 3
 
 ## 6. Lưu state — HARD GATE #3 (BẮT BUỘC)
 
-**Quyết định:** Đã chốt/tiến triển một refund → phải `save_case_state` **trước khi kết thúc hội thoại**.
+**Quyết định:** **Mỗi bước xử lý** đều phải `save_case_state` — không chỉ lúc kết thúc.
 
-Hugo có xu hướng **quên** bước này — báo giá xong rồi đóng máy, làm mất cả state Turso (không resume được hôm sau) lẫn số tiền trên ops sheet. Vì thế đây là gate cứng:
+Hugo có xu hướng **quên** bước này — báo giá xong rồi đóng máy, làm mất cả state Turso (không resume được hôm sau) lẫn số tiền trên ops sheet. Vì thế: **làm xong action nào, lưu ngay action đó**, kèm `stage` tương ứng.
 
-- Gọi `save_case_state` **ngay sau** `calculate_refund` / `generate_refund_message`, và **lại lần nữa** khi khách đồng ý.
-- Tối thiểu truyền: `store_url`, `refund_amount`, `deduction_percent`, `case_type`, và `stage` hiện tại.
-- Nếu khách im sau khi đã báo giá: **lưu trước** (`stage: awaiting_customer_confirm`) rồi mới chờ.
+| Vừa làm xong | `stage` truyền vào | Kèm theo |
+|---|---|---|
+| Hỏi/nhận thêm thông tin | `collecting_info` | các cờ `has_*` đã có |
+| Gửi win-back / offer | `offer_sent` | `winback_offered: true` |
+| Gửi bill / breakdown refund | `bill_sent` | `breakdown_sent: true`, `refund_amount`, `deduction_percent` |
+| Báo số xong, chờ khách xác nhận | `awaiting_customer_confirm` | |
+| Gửi option TH4 A/B hoặc App Credit | `awaiting_option_choice` | |
+| **Forward sang Manager (Boo)** | `awaiting_manager` | `needs_manager: true`, `manager_status: pending`, `manager_brief` |
+| **Forward sang human agent** | `forwarded_to_human` | `assigned_agent: <tên>` |
+| Khách đồng ý | `refund_approved` | |
+| Đã hoàn trong Shopify | `refund_issued` → `completed` | `refund_processed_at` |
+| Từ chối (TH8) | `completed` | `resolution: declined` |
+
+- Tối thiểu luôn truyền `store_url` (khoá chính) + `stage`; thêm field nào vừa đổi.
+- Nếu khách im: **lưu trước** với stage hiện tại rồi mới chờ. Khi phân vân → cứ lưu.
+- `stage` giờ là **free text** (không còn enum cứng) — một stage lạ/sai chính tả **không bao giờ làm hỏng cả lần lưu** (cùng triết lý với `crisp_conversation_id`). Vẫn nên dùng các giá trị canonical ở trên để filter ops-sheet/`list_pending_cases` nhất quán.
 
 ### Vòng đời stage
 
 ```
-collecting_info → awaiting_customer_confirm → refund_approved/refund_issued → done
+collecting_info → (offer_sent / bill_sent) → awaiting_customer_confirm
+                → refund_approved → refund_issued → completed
                 ↘ winback_offered → (completed: kept)
-                ↘ awaiting_manager (≥3 cycles / TH5) → approved → refund_issued
-Terminal khác: awaiting_bill_paid, awaiting_option_choice (TH4), rejected, abandoned
+                ↘ awaiting_manager (≥3 cycles / TH5 / case nhạy cảm) → approved → refund_issued
+                ↘ forwarded_to_human (handoff cho người thật)
+                ↘ completed (resolution: declined)  ← TH8
+Terminal khác: awaiting_bill_paid / awaiting_option_choice (TH4), rejected, abandoned
 ```
 
 State lưu ở bảng `cases` của Turso, **khoá theo `store_url`** (khách quay lại được match theo store, không theo session). `save_case_state` merge từng phần (bỏ qua field `undefined`) nên lưu được bất kỳ tập con cột nào.
