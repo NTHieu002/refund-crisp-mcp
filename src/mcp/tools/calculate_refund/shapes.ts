@@ -27,7 +27,7 @@ const CALCULATE_REFUND_INPUT_SHAPE = {
     .max(100)
     .default(20)
     .describe(
-      "Deduction applied to the prorated amount. Typical values: 0 (full refund, honored commitment), 20 (default: 15% Shopify fee + 5% maintenance), 40 (refund of many unused cycles).",
+      "Deduction applied to the prorated amount. Typical values: 0 (full refund — honored commitment, PageFly fault, trial, returning customer), 10 (split Shopify fees equally — yearly plan or customer pushed back on 20%), 20 (default: 15% Shopify fee + 5% maintenance), 40 (refund of 3+ unused cycles).",
     ),
   num_cycles : z
     .number()
@@ -50,7 +50,23 @@ const CALCULATE_REFUND_INPUT_SHAPE = {
   verified_downgrade_complete : z
     .boolean()
     .describe(
-      "Required. Pass true ONLY if you have verified via check_subscription that the customer's current plan is 'free' OR status is 'uninstalled' / 'cancelled'. Do NOT trust the customer's verbal claim (e.g. 'I just downgraded'). If check_subscription still reports a paid plan with status 'active', pass false — the tool will refuse and instruct you to ask the customer to downgrade first.",
+      "Required. Pass true ONLY if you have verified via check_subscription that the customer's current plan is 'free' OR status is 'uninstalled' / 'cancelled'. Do NOT trust the customer's verbal claim (e.g. 'I just downgraded'). If check_subscription still reports a paid plan with status 'active', pass false — the tool will refuse and instruct you to ask the customer to downgrade first. NOTE: not required for a discount_adjustment (the customer keeps their plan).",
+    ),
+  already_refunded_amount : z
+    .number()
+    .min(0)
+    .default(0)
+    .describe(
+      "Amount (USD) already refunded for this charge per the dashboard. Pass the dashboard value. If it is greater than 0 the tool refuses — Shopify or a colleague has already refunded this charge and a second refund would double-pay.",
+    ),
+  discount_adjustment : z
+    .object({
+      list_price_usd   : z.number().describe("The plan's normal list price per cycle in USD (before the promised discount)."),
+      discount_percent : z.number().min(0).max(100).describe("The discount percent the customer was promised (verified via email proof)."),
+    })
+    .optional()
+    .describe(
+      "Set ONLY for a discount-commitment overcharge (the customer was promised a discount that was never applied). When present, the tool ignores proration and refunds the difference: charge_amount − list_price_usd × (1 − discount_percent/100). Always requires Manager verification of the email proof; the downgrade precondition is waived because the customer keeps their plan.",
     ),
 } satisfies ZodRawShape;
 

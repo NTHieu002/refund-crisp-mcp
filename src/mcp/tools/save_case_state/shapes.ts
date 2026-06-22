@@ -32,7 +32,7 @@ const MANAGER_STATUS_VALUES = [
   "approved_with_changes",
 ] as const;
 
-const CASE_TYPE_VALUES = ["TH1", "TH2", "TH3", "TH4", "TH5", "TH6", "TH7"] as const;
+const CASE_TYPE_VALUES = ["TH1", "TH2", "TH3", "TH4", "TH5", "TH6", "TH7", "TH8"] as const;
 
 /**************************************************************************
  * INPUT
@@ -61,7 +61,15 @@ const SAVE_CASE_STATE_INPUT_SHAPE = {
   case_type         : z.enum(CASE_TYPE_VALUES).optional(),
   stage             : z.enum(STAGE_VALUES).optional(),
   resolution        : z
-    .enum(["refunded_full", "refunded_partial", "app_credit", "rejected", "abandoned"])
+    .enum([
+      "refunded_full",
+      "refunded_partial",
+      "app_credit",
+      "discount_adjusted",
+      "declined",
+      "rejected",
+      "abandoned",
+    ])
     .optional(),
   resolution_reason : z.string().optional(),
   notes             : z

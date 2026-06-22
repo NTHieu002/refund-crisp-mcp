@@ -24,8 +24,8 @@ const COLLECT_REFUND_INFO_INPUT_SHAPE = {
     .default("unknown")
     .describe("Whether the Shopify store is still open (downgrade is not required if closed)"),
   bill_status : z
-    .enum(["paid", "upcoming", "unknown"])
-    .describe("Current bill status. Refunds can only be issued once the bill is Paid."),
+    .enum(["paid", "upcoming", "failed", "unknown"])
+    .describe("Current bill status. Refunds can only be issued once the bill is Paid. 'failed' = the charge failed (store usually frozen) — no money received, so offer App Credit instead of a refund."),
 } satisfies ZodRawShape;
 
 /**************************************************************************

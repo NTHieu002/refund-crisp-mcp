@@ -6,6 +6,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 import { registerCheckSubscriptionTool }    from "@/mcp/tools/check_subscription/main.js";
 import { registerGetBillingHistoryTool }    from "@/mcp/tools/get_billing_history/main.js";
+import { registerCheckUsageDataTool }       from "@/mcp/tools/check_usage_data/main.js";
 import { registerCalculateRefundTool }      from "@/mcp/tools/calculate_refund/main.js";
 import { registerClassifyRefundCaseTool }   from "@/mcp/tools/classify_refund_case/main.js";
 import { registerCollectRefundInfoTool }    from "@/mcp/tools/collect_refund_info/main.js";
@@ -24,6 +25,7 @@ function registerTools(server: McpServer): void {
   // Lookup tools — backed by in-memory fixtures
   registerCheckSubscriptionTool(server);
   registerGetBillingHistoryTool(server);
+  registerCheckUsageDataTool(server);
 
   // Pure-logic tools — deterministic rules and math
   registerClassifyRefundCaseTool(server);

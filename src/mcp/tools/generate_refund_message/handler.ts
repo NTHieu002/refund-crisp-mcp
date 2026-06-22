@@ -46,6 +46,18 @@ Shopify Admin → Apps → PageFly → Pricing → Switch to Free
 
 Once you're on Free, no more charges will be issued. If you'd also like a refund for the unused portion of your current cycle, let us know and we'll take care of it.`;
 
+const BILL_FAILED_BLOCK = `We can see the latest charge didn't go through, so your store may currently be frozen for the unpaid bill. Because the payment never completed, there's no amount for us to refund — but we can still help you get back up and running:
+
+We can issue an App Credit that offsets the PageFly charge, so when you reactivate you'd only need to cover your Shopify subscription and any other apps. Please note the App Credit applies to the PageFly charge only — not your Shopify plan, taxes, or other apps.
+
+Would you like us to apply the App Credit?`;
+
+const DECLINE_INTRO = `Thank you for reaching out, and we're sorry we won't be able to issue a refund in this case.`;
+
+const REVIEW_NOTE = `Please note this is an estimate; the final amount is subject to review by our team before the refund is processed.`;
+
+const MANAGER_REVIEW_NOTE = `This amount still needs to be confirmed by our team before we process it, so please treat it as an estimate for now.`;
+
 /**************************************************************************
  * HELPERS
  ***************************************************************************/
@@ -99,11 +111,46 @@ ${input.deduction_percent === 20
     : `
 • Refund amount: ${fmtUsd(input.refund_amount)} (full refund, no deduction)`;
 
-  return `Here is the refund breakdown:
+  return `Here is an estimate of your refund:
 • Plan: ${input.plan_name} (${fmtUsd(input.charge_amount)} USD/cycle)
 ${cycleLine}${cyclesList}${deductionBlock}
 
-Please let us know if you'd like us to proceed with this refund amount.`;
+Please let us know if you'd like us to proceed, and we'll confirm the final amount.`;
+}
+
+// Currency clarification: the bill may display EUR/CAD/INR/AED while the actual
+// charge — and the refund — is in USD.
+function currencyNote(input: GenerateRefundMessageInput): string {
+  if (!input.bill_currency || input.bill_currency.toUpperCase() === "USD") {
+    return "";
+  }
+
+  const displayed = input.bill_display_amount !== undefined
+    ? `${input.bill_display_amount} ${input.bill_currency.toUpperCase()}`
+    : `${input.bill_currency.toUpperCase()}`;
+
+  return `Just to clarify: although your bill shows ${displayed} due to currency conversion, the actual charge — and the refund — is processed in USD (${fmtUsd(input.refund_amount)}).`;
+}
+
+// Discount-overcharge correction: refund the difference, keep the plan.
+function discountAdjustmentBlock(input: GenerateRefundMessageInput): string {
+  return `After reviewing the discount that was promised to you, we can see it wasn't applied correctly, which led to an overcharge. We'd like to make this right:
+
+• Estimated refund of the overcharged difference: ${fmtUsd(input.refund_amount)}
+• Going forward, we'll make sure the agreed discount is applied to your plan.
+
+${MANAGER_REVIEW_NOTE}`;
+}
+
+// Polite decline (TH8). Built without the refund breakdown — there is no refund.
+function declineBlock(input: GenerateRefundMessageInput): string {
+  const reason = input.decline_reason.trim().length > 0
+    ? input.decline_reason.trim()
+    : "the billed cycle was already fully used";
+
+  return `${DECLINE_INTRO}
+
+After reviewing your account, ${reason}, so this charge falls outside what our refund policy covers. If a new charge has since started a fresh billing cycle you haven't used, we'd be glad to look into refunding that portion — just let us know.`;
 }
 
 /**************************************************************************
@@ -113,14 +160,35 @@ Please let us know if you'd like us to proceed with this refund amount.`;
 function generateRefundMessageHandler(
   input: GenerateRefundMessageInput,
 ): GenerateRefundMessageOutput {
+  // A decline (TH8) issues no refund and is sent BEFORE payout details are
+  // collected, so it skips the refund gate entirely.
+  if (input.case_type === "TH8" || input.is_decline) {
+    const parts = [
+      input.is_angry ? INTRO_ANGRY() : declineBlock(input),
+    ];
+
+    if (input.is_angry) {
+      parts.push(declineBlock(input));
+    }
+
+    return {
+      message                : parts.join("\n\n"),
+      needs_customer_confirm : false,
+      needs_manager_approve  : false,
+    };
+  }
+
   // Handler-level gate: refuse to draft any customer-facing message until the
   // playbook prerequisites are collected. This stops Hugo quoting a refund
-  // amount before billing invoice + bank confirmation have been shared.
+  // amount before billing invoice + bank confirmation have been shared. A
+  // discount adjustment keeps the plan, so it does not require a downgrade.
   const missing: string[] = [];
 
   if (!input.has_billing_invoice) missing.push("billing_invoice");
   if (!input.has_bank_confirmation) missing.push("bank_confirmation");
-  if (!input.verified_downgrade_complete) missing.push("downgrade_to_free (verified via check_subscription)");
+  if (!input.is_discount_adjustment && !input.verified_downgrade_complete) {
+    missing.push("downgrade_to_free (verified via check_subscription)");
+  }
 
   if (missing.length > 0) {
     return {
@@ -143,40 +211,61 @@ function generateRefundMessageHandler(
     parts.push(WINBACK_BLOCK);
   }
 
-  switch (input.case_type) {
-    case "TH2":
-      parts.push(TH2_BLOCK);
-      break;
+  // A discount-overcharge correction has its own block regardless of case type.
+  if (input.is_discount_adjustment) {
+    parts.push(discountAdjustmentBlock(input));
+  } else {
+    switch (input.case_type) {
+      case "TH2":
+        parts.push(TH2_BLOCK);
+        break;
 
-    case "TH4":
-      parts.push(BILL_UPCOMING_BLOCK);
-      break;
+      case "TH4":
+        parts.push(BILL_UPCOMING_BLOCK);
+        break;
 
-    case "TH5":
-      parts.push(TH5_BLOCK);
-      break;
+      case "TH5":
+        parts.push(TH5_BLOCK);
+        break;
 
-    case "TH6":
-      parts.push(TH6_BLOCK);
+      case "TH6":
+        parts.push(TH6_BLOCK);
 
-      if (input.refund_amount > 0) {
-        parts.push(refundBreakdownBlock(input));
-      }
-      break;
+        if (input.refund_amount > 0) {
+          parts.push(refundBreakdownBlock(input));
+        }
+        break;
 
-    default:
-      // TH1, TH3, TH7 all resolve with a prorated refund breakdown
-      if (input.refund_amount > 0) {
-        parts.push(refundBreakdownBlock(input));
-      }
-      break;
+      default:
+        // TH1, TH3, TH7 all resolve with a prorated refund breakdown
+        if (input.bill_status === "failed") {
+          parts.push(BILL_FAILED_BLOCK);
+        } else if (input.refund_amount > 0) {
+          parts.push(refundBreakdownBlock(input));
+        }
+        break;
+    }
+  }
+
+  const needs_manager_approve =
+    input.case_type === "TH5" ||
+    input.cycles.length >= 3 ||
+    input.is_discount_adjustment;
+
+  // Whenever we quote a number, frame it as an estimate. If a Manager still has
+  // to sign off, say so explicitly; otherwise add the lighter review note.
+  if (input.refund_amount > 0 && !input.is_discount_adjustment) {
+    parts.push(needs_manager_approve ? MANAGER_REVIEW_NOTE : REVIEW_NOTE);
+  }
+
+  const currency = currencyNote(input);
+
+  if (currency && input.refund_amount > 0) {
+    parts.push(currency);
   }
 
   const needs_customer_confirm =
     input.case_type !== "TH2" && input.refund_amount > 0;
-
-  const needs_manager_approve =
-    input.case_type === "TH5" || input.cycles.length >= 3;
 
   return {
     message                : parts.join("\n\n"),

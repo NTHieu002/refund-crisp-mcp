@@ -36,6 +36,15 @@ function registerGenerateRefundMessageTool(server: McpServer): void {
         - Drafting the holding message for unauthorized auto-upgrade (TH5)
         - Drafting the downgrade instructions when the customer just wants to stop
           charges (TH6)
+        - Drafting a polite decline (TH8, or is_decline=true) — set decline_reason.
+          A decline skips the gate (no payout details needed to decline).
+        - Drafting the App-Credit offer when the bill FAILED (bill_status=failed).
+        - Drafting a discount-overcharge correction (is_discount_adjustment=true).
+
+        Every quoted amount is framed as an ESTIMATE subject to review; when a
+        Manager must approve (TH5, 3+ cycles, discount adjustment) the message says
+        so explicitly. Pass bill_currency / bill_display_amount when the bill is not
+        in USD so the message clarifies the refund is processed in USD.
 
         Call this tool after "classify_refund_case" and "calculate_refund". The
         returned message should still be reviewed by the agent before being sent.
@@ -43,7 +52,8 @@ function registerGenerateRefundMessageTool(server: McpServer): void {
         PRECONDITION: do NOT call this tool until "collect_refund_info" has
         returned "ready_to_process: true". Quoting a refund amount before the
         customer has shared refund_reason, store_url, billing_invoice and
-        bank_confirmation is a policy violation.
+        bank_confirmation is a policy violation. (Declines and failed-bill App-Credit
+        offers are exempt — there is no refund amount to quote.)
 
         MANDATORY FOLLOW-UP: immediately after you send this message (and again
         once the customer accepts), you MUST call "save_case_state" with

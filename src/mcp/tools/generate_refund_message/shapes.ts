@@ -9,7 +9,7 @@ import type { ZodRawShape } from "zod";
  * CONSTANTS
  ***************************************************************************/
 
-const CASE_TYPES = ["TH1", "TH2", "TH3", "TH4", "TH5", "TH6", "TH7"] as const;
+const CASE_TYPES = ["TH1", "TH2", "TH3", "TH4", "TH5", "TH6", "TH7", "TH8"] as const;
 
 /**************************************************************************
  * INPUT
@@ -40,8 +40,28 @@ const GENERATE_REFUND_MESSAGE_INPUT_SHAPE = {
     .default(false)
     .describe("Whether to use the empathetic opening for angry customers"),
   bill_status        : z
-    .enum(["paid", "upcoming"])
-    .describe("Current bill status. TH4 appends the two-option block when Upcoming."),
+    .enum(["paid", "upcoming", "failed"])
+    .describe("Current bill status. TH4 appends the two-option block when Upcoming; 'failed' appends the App-Credit / wait-for-retry block (store frozen, no money received)."),
+  bill_currency      : z
+    .string()
+    .default("USD")
+    .describe("ISO currency code shown on the customer's Shopify bill. When not USD, the message clarifies the charge/refund is processed in USD."),
+  bill_display_amount : z
+    .number()
+    .optional()
+    .describe("The amount as it appears on the bill in bill_currency (e.g. 20.81 for €20.81). Used only for the currency-clarification line; the refund itself is always in USD."),
+  is_decline         : z
+    .boolean()
+    .default(false)
+    .describe("Set true together with case_type 'TH8' to draft a polite decline. A decline skips the invoice/bank/downgrade gate (you decline before collecting payout details)."),
+  decline_reason     : z
+    .string()
+    .default("")
+    .describe("Customer-facing reason for the decline (e.g. 'the billed cycle was fully used' or 'your store published/updated pages on <dates>'). Required when is_decline is true."),
+  is_discount_adjustment : z
+    .boolean()
+    .default(false)
+    .describe("True when refund_amount is a discount-overcharge correction (output of calculate_refund with discount_adjustment). Draws the discount-adjustment block and forces Manager approval."),
   has_billing_invoice : z
     .boolean()
     .describe(

@@ -26,11 +26,13 @@ function createMcpServer(): McpServer {
           (check_subscription)
         - Retrieve the full PageFly billing history of a store, including Upcoming
           bills and PageFly earnings after Shopify fees (get_billing_history)
-        - Classify a refund request into one of the 7 playbook cases (TH1–TH7)
-          and get back the recommended action, deduction and escalation flags
-          (classify_refund_case)
-        - Compute a prorated or multi-cycle refund with the correct deduction
-          (calculate_refund)
+        - Check whether the store actually USED PageFly in a period (pages
+          published / edited) to verify a "I never used it" claim (check_usage_data)
+        - Classify a refund request into one of the 8 playbook cases (TH1–TH8,
+          where TH8 = decline) and get back the recommended action, deduction and
+          escalation flags + reason (classify_refund_case)
+        - Compute a prorated, multi-cycle, or discount-adjustment refund with the
+          correct deduction (calculate_refund)
         - Decide which piece of information to ask the customer next, and surface
           current blockers such as an Upcoming bill or a plan still on paid
           (collect_refund_info)
@@ -41,8 +43,9 @@ function createMcpServer(): McpServer {
 
         Typical flow:
           get_case_state → collect_refund_info → check_subscription →
-          get_billing_history → classify_refund_case → calculate_refund →
-          generate_refund_message → save_case_state → tag_case
+          get_billing_history → (check_usage_data if "didn't use it" is claimed) →
+          classify_refund_case → calculate_refund → generate_refund_message →
+          save_case_state → tag_case
 
         HARD GATE — never skip:
         1. Call "collect_refund_info" at the start of every customer turn and
@@ -88,10 +91,29 @@ function createMcpServer(): McpServer {
         refund case carries the "refund" segment and the ops team can filter
         them from the Crisp dashboard without manual tagging.
 
-        All refunds follow a 30-day cycle and PageFly's deduction policy
-        (0% full refund when a team member has committed, 20% default, 40% for
-        multi-cycle unused refunds). Any refund of 3+ cycles and any case of
-        unauthorized auto-upgrade must be escalated to Manager (Boo).
+        All refunds follow a 30-day cycle and PageFly's deduction policy:
+        0% (honored commitment — human OR bot — / PageFly fault / service failure
+        / trial / returning customer), 10% (yearly plan, or the customer pushes
+        back on 20% — split Shopify fees equally), 20% (default), 40% (3+ unused
+        cycles). The number you compute is an ESTIMATE: present it as
+        "the estimated refund would be approximately $X, subject to review",
+        never as a hard confirmed figure.
+
+        ESCALATE TO MANAGER (Boo) — never self-decide — when ANY of these hold:
+        3+ cycles, unauthorized auto-upgrade (TH5), a prior commitment, a LOYAL
+        customer (subscribed 2+ years), a high-value account (yearly / multi-store
+        / expensive plan), a frustrated / repeat-complaint customer, a bad-review
+        risk, a customer who has ALREADY left a bad review (pivot to a full refund
+        to recover), or a discount-commitment claim. These flags also PREVENT an
+        automatic decline — a bad review from a loyal customer costs far more than
+        one cycle.
+
+        DECLINE (TH8) only an ordinary case where the billed cycle was fully used
+        (cancelled after it ended) or check_usage_data proves active use — and the
+        customer is none of the sensitive cases above. Decline politely on the
+        Official Refund Policy; offer to refund only a fresh, unused partial cycle
+        if a new charge has started. If the bill FAILED (store frozen, no money
+        received) you cannot refund — offer an App Credit instead.
       `,
     },
   );

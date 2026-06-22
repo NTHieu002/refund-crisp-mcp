@@ -52,7 +52,10 @@ function collectRefundInfoHandler(
   // Blockers — only surface one at a time to keep the AI focused
   let blocker: string | null = null;
 
-  if (input.bill_status === "upcoming") {
+  if (input.bill_status === "failed") {
+    blocker =
+      "Payment FAILED (the charge did not go through — the store is usually frozen for the unpaid bill). No money was received, so a cash refund is impossible. Offer an App Credit to offset the PageFly charge so the customer can reactivate (note: the App Credit covers only the PageFly charge, NOT the Shopify subscription, taxes or other apps), OR wait for Shopify to retry until the bill shows Paid, then refund.";
+  } else if (input.bill_status === "upcoming") {
     blocker =
       "Bill is still Upcoming. Offer the customer either Option A (App Credit now) or Option B (wait until the bill is Paid, then refund to bank).";
   } else if (input.bill_status === "unknown") {
