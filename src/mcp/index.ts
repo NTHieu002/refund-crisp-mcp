@@ -66,12 +66,20 @@ function createMcpServer(): McpServer {
            within that scope, over-tagging is safe, under-tagging is not.
            DO NOT tag conversations that are PURELY a technical / bug / setup
            issue with NO money intent — e.g. OAuth / redirect_uri / login
-           errors, install or editor bugs, broken pages, or third-party-app
-           problems (Releasit, Judge.me, etc.). Those are not refund cases.
+           errors, install or editor bugs, broken pages, third-party-app
+           problems (Releasit, Judge.me, etc.), or a promo / discount banner
+           displaying wrong (a "20% off" sign, a Shopify "Sales" tag, or a
+           "% off" badge showing on a page). Those are not refund cases.
            The deciding test is INTENT, not topic: if the customer wants money
            back / to cancel / to stop a charge — even when the trigger is a bug
            ("the app is broken so I want a refund") — tag it. If they only want
            the bug fixed and never mention money/cancellation, do NOT tag.
+           BEWARE the false friends: "discount", "sale", "% off", "20% off",
+           "Sales tag", "promo" almost always refer to a storefront PROMO
+           DISPLAY, not to a PageFly refund. A discount SHOWING (or showing in
+           the wrong place) is a theme/display bug, never a request for money
+           back — do NOT tag it unless the customer separately asks to be
+           refunded or to cancel.
         3. SAVE AFTER EVERY STEP. Call "save_case_state" after every action that
            changes the case — not only when a refund is quoted. Pass store_url
            plus whatever changed, and the stage that matches what just happened:

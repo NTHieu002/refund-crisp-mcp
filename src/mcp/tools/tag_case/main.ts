@@ -41,14 +41,23 @@ function registerTagCaseTool(server: McpServer): void {
         DO NOT tag — and do not treat as a refund — a conversation that is
         PURELY a technical / bug / setup issue with NO money intent: OAuth /
         redirect_uri / login errors, install or editor bugs, broken or
-        erroring pages, or third-party-app problems (Releasit, Judge.me,
-        etc.). Those are support tickets, not refund cases.
+        erroring pages, third-party-app problems (Releasit, Judge.me, etc.),
+        or a promo / discount banner displaying wrong (a "20% off" sign, a
+        Shopify "Sales" tag, a "% off" badge appearing on a page). Those are
+        support tickets, not refund cases.
 
         The deciding test is INTENT, not topic. If the customer wants money
         back, to cancel, or to stop a charge — even when a bug is what
         triggered it ("the app is broken so I want a refund") — tag it. If in
         doubt WITHIN that money/cancel scope, tag. But a chat that only asks to
         fix a bug and never mentions money or cancellation must stay untagged.
+
+        FALSE FRIENDS — the words "discount", "sale", "% off", "20% off",
+        "Sales tag", "promo" almost always describe a storefront PROMO DISPLAY,
+        not a PageFly refund. A discount SHOWING (or in the wrong spot) is a
+        theme/display bug, never a request for money back. Do NOT tag on these
+        words alone — only tag if the customer separately asks to be refunded
+        or to cancel.
 
         Call order on turn 1 of a refund conversation:
           get_case_state → tag_case → collect_refund_info → ...
